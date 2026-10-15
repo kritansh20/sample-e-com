@@ -1,298 +1,288 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { useCart } from '../hooks/useCart';
+import { useWishlist } from '../hooks/useWishlist';
+import { Alert, ConfirmDialog, EmptyState, Page, PageTitle } from '../components/ui';
+import { formatCurrency } from '../utils/format';
 
-const Container = styled.div`
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
-`;
+const MAX_PER_ITEM = 10;
 
-const Title = styled.h1`
-  margin-bottom: 30px;
-  color: #333;
-`;
-
-const EmptyCart = styled.div`
-  text-align: center;
-  padding: 60px 20px;
-  color: #666;
-`;
-
-const CartItems = styled.div`
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-  margin-bottom: 30px;
-`;
-
-const CartItem = styled.div`
+const Layout = styled.div`
   display: grid;
-  grid-template-columns: 80px 1fr auto auto auto;
-  gap: 15px;
-  padding: 20px;
-  border-bottom: 1px solid #eee;
-  align-items: center;
-  
-  &:last-child {
-    border-bottom: none;
-  }
-  
-  @media (max-width: 768px) {
+  grid-template-columns: 1fr 340px;
+  gap: 30px;
+
+  @media (max-width: 900px) {
     grid-template-columns: 1fr;
-    gap: 10px;
-    text-align: center;
   }
 `;
 
-const ProductImage = styled.img`
-  width: 80px;
-  height: 80px;
-  object-fit: cover;
-  border-radius: 6px;
-`;
-
-const ProductInfo = styled.div`
-  h3 {
-    margin-bottom: 5px;
-    color: #333;
-  }
-  
-  p {
-    color: #666;
-    font-size: 0.9rem;
-  }
-`;
-
-const QuantityControls = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  
-  @media (max-width: 768px) {
-    justify-content: center;
-  }
-`;
-
-const QuantityButton = styled.button`
-  width: 30px;
-  height: 30px;
-  border: 1px solid #ddd;
-  background: white;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  
-  &:hover:not(:disabled) {
-    background-color: #f8f9fa;
-  }
-  
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
-const Quantity = styled.span`
-  font-weight: 500;
-  min-width: 30px;
-  text-align: center;
-`;
-
-const Price = styled.div`
-  font-weight: bold;
-  color: #007bff;
-`;
-
-const RemoveButton = styled.button`
-  background: #dc3545;
-  color: white;
-  border: none;
-  padding: 8px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  
-  &:hover {
-    background: #c82333;
-  }
-`;
-
-const CartSummary = styled.div`
-  background: white;
+const Item = styled.div`
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  gap: 16px;
+  background: #fff;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  padding: 20px;
-`;
+  padding: 16px;
+  margin-bottom: 12px;
 
-const SummaryRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  
-  &:last-child {
-    border-top: 1px solid #eee;
-    padding-top: 15px;
-    margin-top: 15px;
-    font-size: 1.2rem;
-    font-weight: bold;
+  img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 6px;
   }
 `;
 
-const Actions = styled.div`
+const Qty = styled.div`
   display: flex;
-  gap: 15px;
-  margin-top: 20px;
-  
-  @media (max-width: 768px) {
-    flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+
+  button {
+    padding: 4px 12px;
+    background: #e9ecef;
+  }
+`;
+
+const LinkButton = styled.button`
+  background: none;
+  color: #007bff;
+  padding: 4px 0;
+  margin-right: 16px;
+`;
+
+const Summary = styled.aside`
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  height: fit-content;
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .total {
+    font-weight: 700;
+    font-size: 1.2rem;
+    border-top: 1px solid #e9ecef;
+    padding-top: 10px;
+  }
+`;
+
+const CouponForm = styled.form`
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 8px;
+
+  button {
+    white-space: nowrap;
   }
 `;
 
 const Cart: React.FC = () => {
   const navigate = useNavigate();
-  const { cart, loading, updateCartItem, removeFromCart, clearCart } = useCart();
+  const { cart, loading, error, updateCartItem, removeFromCart, moveToWishlist, clearCart, applyCoupon, removeCoupon } = useCart();
+  const { refresh: refreshWishlist } = useWishlist();
+  const [itemErrors, setItemErrors] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState<{ text: string; variant: 'success' | 'error' } | null>(null);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
 
-  const handleQuantityChange = async (itemId: string, newQuantity: number) => {
+  const runItem = async (itemId: string, action: () => Promise<void>, success?: string) => {
+    setItemErrors(prev => ({ ...prev, [itemId]: '' }));
+    setMessage(null);
     try {
-      await updateCartItem(itemId, newQuantity);
-    } catch (error) {
-      console.error('Failed to update cart item:', error);
+      await action();
+      if (success) setMessage({ text: success, variant: 'success' });
+    } catch (err) {
+      setItemErrors(prev => ({ ...prev, [itemId]: err instanceof Error ? err.message : 'Something went wrong' }));
     }
   };
 
-  const handleRemoveItem = async (itemId: string) => {
+  const handleApplyCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCouponError(null);
+    setMessage(null);
+    if (!couponCode.trim()) {
+      setCouponError('Enter a coupon code');
+      return;
+    }
     try {
-      await removeFromCart(itemId);
-    } catch (error) {
-      console.error('Failed to remove cart item:', error);
+      await applyCoupon(couponCode.trim());
+      setCouponCode('');
+      setMessage({ text: 'Coupon applied.', variant: 'success' });
+    } catch (err) {
+      setCouponError(err instanceof Error ? err.message : 'Could not apply coupon');
     }
   };
 
-  const handleClearCart = async () => {
-    if (window.confirm('Are you sure you want to clear your cart?')) {
-      try {
-        await clearCart();
-      } catch (error) {
-        console.error('Failed to clear cart:', error);
-      }
+  const handleClear = async () => {
+    try {
+      await clearCart();
+      setConfirmClear(false);
+      setMessage({ text: 'Your cart was cleared.', variant: 'success' });
+    } catch (err) {
+      setConfirmClear(false);
+      setMessage({ text: err instanceof Error ? err.message : 'Could not clear the cart', variant: 'error' });
     }
   };
 
-  if (loading) {
-    return (
-      <Container>
-        <div className="loading">Loading cart...</div>
-      </Container>
-    );
+  if (!cart && loading) {
+    return <Page><div className="loading" data-testid="cart-loading">Loading your cart...</div></Page>;
   }
 
-  if (!cart || cart.items.length === 0) {
-    return (
-      <Container>
-        <Title>Shopping Cart</Title>
-        <EmptyCart>
-          <h3>Your cart is empty</h3>
-          <p>Add some products to get started!</p>
-          <Link to="/products" className="btn-primary" style={{ display: 'inline-block', textDecoration: 'none', marginTop: '20px' }}>
-            Shop Now
-          </Link>
-        </EmptyCart>
-      </Container>
-    );
-  }
+  const items = cart?.items || [];
 
   return (
-    <Container>
-      <Title>Shopping Cart ({cart.totalItems} items)</Title>
-      
-      <CartItems data-testid="cart-items">
-        {cart.items.map((item) => (
-          <CartItem key={item.id} data-testid="cart-item">
-            <ProductImage 
-              src={item.product?.imageUrl} 
-              alt={item.product?.name}
-              onError={(e) => {
-                e.currentTarget.src = 'https://via.placeholder.com/80x80?text=No+Image';
-              }}
-            />
-            
-            <ProductInfo>
-              <h3 data-testid="item-name">{item.product?.name}</h3>
-              <p>${(item.price || 0).toFixed(2)} each</p>
-            </ProductInfo>
-            
-            <QuantityControls>
-              <QuantityButton
-                data-testid="decrease-quantity"
-                onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
-                disabled={item.quantity <= 1}
-              >
-                -
-              </QuantityButton>
-              <Quantity data-testid="item-quantity">{item.quantity}</Quantity>
-              <QuantityButton
-                data-testid="increase-quantity"
-                onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
-                disabled={item.quantity >= (item.product?.stock || 0)}
-              >
-                +
-              </QuantityButton>
-            </QuantityControls>
-            
-            <Price data-testid="item-price">${(item.subtotal || 0).toFixed(2)}</Price>
-            
-            <RemoveButton data-testid="remove-item" onClick={() => handleRemoveItem(item.id)}>
-              Remove
-            </RemoveButton>
-          </CartItem>
-        ))}
-      </CartItems>
+    <Page data-testid="cart-page">
+      <PageTitle>Shopping Cart</PageTitle>
+      {error && !message && <Alert variant="error" testId="cart-error">{error}</Alert>}
+      {cart?.couponMessage && <Alert variant="warning" testId="coupon-removed-message">{cart.couponMessage}</Alert>}
+      {message && <Alert variant={message.variant} testId="cart-message">{message.text}</Alert>}
 
-      <CartSummary data-testid="cart-summary">
-        <SummaryRow>
-          <span>Subtotal:</span>
-          <span data-testid="cart-subtotal">${(cart.totalAmount || 0).toFixed(2)}</span>
-        </SummaryRow>
-        <SummaryRow>
-          <span>Shipping:</span>
-          <span>Free</span>
-        </SummaryRow>
-        <SummaryRow>
-          <span>Total:</span>
-          <span data-testid="cart-total">${(cart.totalAmount || 0).toFixed(2)}</span>
-        </SummaryRow>
-        
-        <Actions>
-          <button 
-            className="btn-secondary" 
-            data-testid="clear-cart"
-            onClick={handleClearCart}
-          >
-            Clear Cart
-          </button>
-          <Link 
-            to="/products" 
-            className="btn-outline" 
-            style={{ textDecoration: 'none', textAlign: 'center' }}
-          >
-            Continue Shopping
-          </Link>
-          <button 
-            className="btn-primary"
-            data-testid="checkout-button"
-            onClick={() => navigate('/checkout')}
-            style={{ flex: 1 }}
-          >
-            Proceed to Checkout
-          </button>
-        </Actions>
-      </CartSummary>
-    </Container>
+      {items.length === 0 ? (
+        <EmptyState data-testid="empty-cart">
+          <p>Your cart is empty.</p>
+          <Link to="/products" style={{ display: 'inline-block', marginTop: 12 }} data-testid="continue-shopping">Continue shopping</Link>
+        </EmptyState>
+      ) : (
+        <Layout>
+          <div data-testid="cart-items">
+            {items.map(item => {
+              const max = Math.min(item.product.stock, MAX_PER_ITEM);
+              return (
+                <Item key={item.id} data-testid="cart-item" data-product-id={item.productId}>
+                  <img src={item.product.imageUrl} alt={item.product.name} />
+                  <div>
+                    <Link to={`/products/${item.productId}`} data-testid="item-name" style={{ fontWeight: 600, color: '#333' }}>{item.product.name}</Link>
+                    <div data-testid="item-price">{formatCurrency(item.price)} each</div>
+                    {item.product.stock < item.quantity && (
+                      <div className="error-message" data-testid="item-stock-warning">
+                        {item.product.stock === 0 ? 'Out of stock — remove this item to check out' : `Only ${item.product.stock} available`}
+                      </div>
+                    )}
+                    <Qty>
+                      <button
+                        type="button"
+                        aria-label={`Decrease quantity of ${item.product.name}`}
+                        data-testid="decrease-quantity"
+                        disabled={item.quantity <= 1 || loading}
+                        onClick={() => runItem(item.id, () => updateCartItem(item.id, item.quantity - 1))}
+                      >
+                        −
+                      </button>
+                      <span data-testid="item-quantity">{item.quantity}</span>
+                      <button
+                        type="button"
+                        aria-label={`Increase quantity of ${item.product.name}`}
+                        data-testid="increase-quantity"
+                        disabled={item.quantity >= max || loading}
+                        onClick={() => runItem(item.id, () => updateCartItem(item.id, item.quantity + 1))}
+                      >
+                        +
+                      </button>
+                    </Qty>
+                    <div style={{ marginTop: 8 }}>
+                      <LinkButton type="button" data-testid="move-to-wishlist" onClick={() => runItem(item.id, async () => { await moveToWishlist(item.id); await refreshWishlist(); }, `${item.product.name} moved to your wishlist.`)}>
+                        Save for later
+                      </LinkButton>
+                      <LinkButton type="button" data-testid="remove-item" style={{ color: '#dc3545' }} onClick={() => runItem(item.id, () => removeFromCart(item.id), `${item.product.name} removed from your cart.`)}>
+                        Remove
+                      </LinkButton>
+                    </div>
+                    {itemErrors[item.id] && <div className="error-message" role="alert" data-testid="item-error">{itemErrors[item.id]}</div>}
+                  </div>
+                  <div style={{ fontWeight: 700 }} data-testid="item-subtotal">{formatCurrency(item.subtotal)}</div>
+                </Item>
+              );
+            })}
+            <button type="button" className="btn-outline" data-testid="clear-cart" onClick={() => setConfirmClear(true)}>
+              Clear cart
+            </button>
+          </div>
+
+          <Summary data-testid="cart-summary">
+            <h2 style={{ marginBottom: 16 }}>Order Summary</h2>
+            <div className="row">
+              <span>Items ({cart!.totalItems})</span>
+              <span data-testid="cart-subtotal">{formatCurrency(cart!.subtotal)}</span>
+            </div>
+            {cart!.coupon && (
+              <div className="row" style={{ color: '#28a745' }}>
+                <span>
+                  Coupon <strong data-testid="applied-coupon-code">{cart!.coupon.code}</strong>
+                </span>
+                <span data-testid="cart-discount">−{formatCurrency(cart!.discount)}</span>
+              </div>
+            )}
+            <div className="row total">
+              <span>Total</span>
+              <span data-testid="cart-total">{formatCurrency(cart!.totalPrice)}</span>
+            </div>
+            <p style={{ fontSize: '0.85rem', color: '#6c757d' }}>Shipping and tax are calculated at checkout.</p>
+            <p style={{ fontSize: '0.9rem', margin: '8px 0' }} data-testid="free-shipping-message">
+              {cart!.coupon?.type === 'free_shipping'
+                ? 'Free standard shipping applied.'
+                : cart!.amountToFreeShipping > 0
+                  ? `Add ${formatCurrency(cart!.amountToFreeShipping)} more for free standard shipping.`
+                  : 'You qualify for free standard shipping.'}
+            </p>
+
+            {cart!.coupon ? (
+              <div style={{ margin: '12px 0' }}>
+                <span style={{ fontSize: '0.9rem' }}>{cart!.coupon.description}</span>{' '}
+                <LinkButton type="button" data-testid="remove-coupon-button" onClick={async () => { await removeCoupon(); setMessage({ text: 'Coupon removed.', variant: 'success' }); }}>
+                  Remove
+                </LinkButton>
+              </div>
+            ) : (
+              <CouponForm onSubmit={handleApplyCoupon} noValidate>
+                <input
+                  aria-label="Coupon code"
+                  placeholder="Coupon code"
+                  value={couponCode}
+                  data-testid="coupon-input"
+                  onChange={e => setCouponCode(e.target.value)}
+                />
+                <button type="submit" className="btn-secondary" data-testid="apply-coupon-button" disabled={loading}>
+                  Apply
+                </button>
+              </CouponForm>
+            )}
+            {couponError && <div className="error-message" role="alert" data-testid="coupon-error">{couponError}</div>}
+
+            <button
+              type="button"
+              className="btn-primary"
+              style={{ width: '100%', marginTop: 16 }}
+              data-testid="checkout-button"
+              disabled={items.some(i => i.product.stock < i.quantity)}
+              onClick={() => navigate('/checkout')}
+            >
+              Proceed to Checkout
+            </button>
+          </Summary>
+        </Layout>
+      )}
+
+      {confirmClear && (
+        <ConfirmDialog
+          title="Clear cart?"
+          message="This removes every item from your cart."
+          confirmLabel="Clear cart"
+          testId="confirm-clear-cart"
+          busy={loading}
+          onConfirm={handleClear}
+          onCancel={() => setConfirmClear(false)}
+        />
+      )}
+    </Page>
   );
 };
 

@@ -1,384 +1,362 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
+import apiClient, { getErrorMessage, getFieldErrors } from '../services/apiClient';
 import { useCart } from '../hooks/useCart';
-import { Address } from '../types';
-import apiClient from '../services/apiClient';
+import { AddressInput, FieldErrors, PaymentMethod, Quote, SavedAddress, ShippingMethod, ShippingOption } from '../types';
+import AddressForm, { emptyAddress, validateAddressInput } from '../components/AddressForm';
+import { Alert, EmptyState, FieldError, Page, PageTitle } from '../components/ui';
+import { formatCurrency } from '../utils/format';
 
-const Container = styled.div`
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 20px;
-`;
+const COD_LIMIT = 500;
 
-const Title = styled.h1`
-  margin-bottom: 30px;
-  color: #333;
-`;
-
-const CheckoutLayout = styled.div`
+const Layout = styled.div`
   display: grid;
-  grid-template-columns: 1fr 400px;
-  gap: 40px;
-  
-  @media (max-width: 768px) {
+  grid-template-columns: 1fr 360px;
+  gap: 30px;
+
+  @media (max-width: 900px) {
     grid-template-columns: 1fr;
-    gap: 30px;
   }
 `;
 
-const Section = styled.div`
-  background: white;
+const Section = styled.section`
+  background: #fff;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  padding: 30px;
+  padding: 20px;
   margin-bottom: 20px;
+
+  h2 {
+    font-size: 1.2rem;
+    margin-bottom: 16px;
+  }
 `;
 
-const SectionTitle = styled.h2`
-  margin-bottom: 20px;
-  color: #333;
-  font-size: 1.3rem;
-`;
-
-const Form = styled.form`
+const Option = styled.label`
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 10px;
+  cursor: pointer;
+
+  input {
+    width: auto;
+    margin-top: 4px;
+  }
+
+  .grow {
+    flex: 1;
+  }
 `;
 
-const FormRow = styled.div`
+const Summary = styled.aside`
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  height: fit-content;
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .total {
+    font-weight: 700;
+    font-size: 1.2rem;
+    border-top: 1px solid #e9ecef;
+    padding-top: 10px;
+  }
+`;
+
+const CardGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
+  gap: 0 16px;
+
+  .full {
+    grid-column: 1 / -1;
   }
 `;
 
-const FormGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-`;
+interface CardDetails {
+  name: string;
+  number: string;
+  expiry: string;
+  cvv: string;
+}
 
-const Label = styled.label`
-  margin-bottom: 5px;
-  font-weight: 500;
-  color: #555;
-`;
-
-const Input = styled.input`
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 14px;
-  
-  &:focus {
-    outline: none;
-    border-color: #007bff;
+const luhnValid = (digits: string) => {
+  let sum = 0;
+  let double = false;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let d = Number(digits[i]);
+    if (double) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+    double = !double;
   }
-`;
+  return sum % 10 === 0;
+};
 
-const Select = styled.select`
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 14px;
-  background-color: white;
-  
-  &:focus {
-    outline: none;
-    border-color: #007bff;
+export const validateCard = (card: CardDetails, now = new Date()): FieldErrors => {
+  const errors: FieldErrors = {};
+  if (!card.name.trim()) errors.cardName = 'Name on card is required';
+  const digits = card.number.replace(/\s/g, '');
+  if (!digits) errors.cardNumber = 'Card number is required';
+  else if (!/^\d{13,19}$/.test(digits) || !luhnValid(digits)) errors.cardNumber = 'Enter a valid card number';
+  const match = /^(\d{2})\/(\d{2})$/.exec(card.expiry.trim());
+  if (!match) errors.cardExpiry = 'Enter the expiry date as MM/YY';
+  else {
+    const month = Number(match[1]);
+    const year = 2000 + Number(match[2]);
+    if (month < 1 || month > 12) errors.cardExpiry = 'Enter a valid month (01-12)';
+    else if (year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1)) errors.cardExpiry = 'This card has expired';
   }
-`;
+  if (!/^\d{3,4}$/.test(card.cvv.trim())) errors.cardCvv = 'CVV must be 3 or 4 digits';
+  return errors;
+};
 
-const OrderSummary = styled.div`
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  padding: 30px;
-  position: sticky;
-  top: 100px;
-`;
-
-const OrderItem = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid #eee;
-  
-  &:last-child {
-    border-bottom: none;
-  }
-`;
-
-const ItemInfo = styled.div`
-  flex: 1;
-  
-  h4 {
-    margin-bottom: 5px;
-    color: #333;
-  }
-  
-  p {
-    color: #666;
-    font-size: 0.9rem;
-  }
-`;
-
-const ItemPrice = styled.div`
-  font-weight: bold;
-  color: #007bff;
-`;
-
-const SummaryRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-  margin: 10px 0;
-  
-  &.total {
-    border-top: 1px solid #eee;
-    padding-top: 15px;
-    margin-top: 20px;
-    font-size: 1.2rem;
-    font-weight: bold;
-  }
-`;
-
-const PlaceOrderButton = styled.button`
-  width: 100%;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  padding: 15px;
-  border-radius: 6px;
-  font-size: 1.1rem;
-  font-weight: 500;
-  cursor: pointer;
-  margin-top: 20px;
-  
-  &:hover:not(:disabled) {
-    background-color: #0056b3;
-  }
-  
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-`;
-
-const ErrorMessage = styled.div`
-  color: #dc3545;
-  font-size: 14px;
-  margin-top: 10px;
-  padding: 10px;
-  background-color: #f8d7da;
-  border: 1px solid #f5c6cb;
-  border-radius: 6px;
-`;
+const formatCardNumber = (value: string) => value.replace(/\D/g, '').slice(0, 19).replace(/(\d{4})(?=\d)/g, '$1 ');
 
 const Checkout: React.FC = () => {
   const navigate = useNavigate();
-  const { cart, clearCart } = useCart();
-  
-  const [shippingAddress, setShippingAddress] = useState<Address>({
-    street: '',
-    city: '',
-    state: '',
-    zipCode: '',
-    country: 'United States'
-  });
-  
-  const [paymentMethod, setPaymentMethod] = useState('credit-card');
-  const [loading, setLoading] = useState(false);
+  const { cart, loading: cartLoading, refreshCart } = useCart();
+
+  const [addresses, setAddresses] = useState<SavedAddress[]>([]);
+  const [addressChoice, setAddressChoice] = useState<string>('new');
+  const [newAddress, setNewAddress] = useState<AddressInput>(emptyAddress());
+  const [saveAddress, setSaveAddress] = useState(false);
+  const [options, setOptions] = useState<ShippingOption[]>([]);
+  const [shippingMethod, setShippingMethod] = useState<ShippingMethod>('standard');
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
+  const [card, setCard] = useState<CardDetails>({ name: '', number: '', expiry: '', cvv: '' });
+  const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
+  const [placing, setPlacing] = useState(false);
 
-  const handleAddressChange = (field: keyof Address, value: string) => {
-    setShippingAddress(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
+  useEffect(() => {
+    apiClient.getAddresses().then(list => {
+      setAddresses(list);
+      const preferred = list.find(a => a.isDefault) || list[0];
+      if (preferred) setAddressChoice(preferred.id);
+    }).catch(() => setAddresses([]));
+    apiClient.getShippingOptions().then(setOptions).catch(() => setOptions([]));
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
+  useEffect(() => {
+    if (!cart || cart.items.length === 0) return;
+    apiClient.getQuote(shippingMethod).then(setQuote).catch(err => setError(getErrorMessage(err, 'Could not calculate totals')));
+  }, [shippingMethod, cart]);
 
-    try {
-      const order = await apiClient.createOrder({
-        shippingAddress,
-        paymentMethod
-      });
-      
-      await clearCart();
-      navigate('/orders', { 
-        state: { 
-          message: `Order #${order.id} placed successfully!` 
-        }
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to place order');
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (!cart && cartLoading) {
+    return <Page><div className="loading">Loading checkout...</div></Page>;
+  }
 
   if (!cart || cart.items.length === 0) {
     return (
-      <Container>
-        <Title>Checkout</Title>
-        <Section>
-          <p>Your cart is empty. Please add some items before checking out.</p>
-        </Section>
-      </Container>
+      <Page>
+        <PageTitle>Checkout</PageTitle>
+        <EmptyState data-testid="checkout-empty">
+          <p>Your cart is empty. Add some items before checking out.</p>
+          <Link to="/products" style={{ display: 'inline-block', marginTop: 12 }}>Browse products</Link>
+        </EmptyState>
+      </Page>
     );
   }
 
+  const usingNewAddress = addressChoice === 'new';
+
+  const handlePlaceOrder = async () => {
+    setError(null);
+    const nextErrors: FieldErrors = {};
+    if (usingNewAddress) Object.assign(nextErrors, validateAddressInput(newAddress));
+    if (paymentMethod === 'card') Object.assign(nextErrors, validateCard(card));
+    if (paymentMethod === 'cod' && quote && quote.total > COD_LIMIT) {
+      nextErrors.paymentMethod = `Cash on delivery is only available for orders up to ${formatCurrency(COD_LIMIT)}`;
+    }
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) {
+      setError('Please correct the highlighted fields.');
+      return;
+    }
+
+    setPlacing(true);
+    try {
+      const order = await apiClient.createOrder({
+        ...(usingNewAddress ? { shippingAddress: newAddress, saveAddress } : { addressId: addressChoice }),
+        shippingMethod,
+        paymentMethod,
+        cardLast4: paymentMethod === 'card' ? card.number.replace(/\s/g, '').slice(-4) : undefined,
+      });
+      navigate(`/orders/${order.id}`, { state: { placed: true } });
+      refreshCart();
+    } catch (err) {
+      setErrors(getFieldErrors(err));
+      setError(getErrorMessage(err, 'Failed to place order'));
+    } finally {
+      setPlacing(false);
+    }
+  };
+
   return (
-    <Container>
-      <Title>Checkout</Title>
-      
-      <CheckoutLayout>
+    <Page data-testid="checkout-page">
+      <PageTitle>Checkout</PageTitle>
+      {error && <Alert variant="error" testId="checkout-error">{error}</Alert>}
+      <Layout>
         <div>
-          <Section>
-            <SectionTitle>Shipping Address</SectionTitle>
-            <Form onSubmit={handleSubmit}>
-              <FormGroup>
-                <Label htmlFor="street">Street Address</Label>
-                <Input
-                  id="street"
-                  data-testid="street-input"
-                  type="text"
-                  value={shippingAddress.street}
-                  onChange={(e) => handleAddressChange('street', e.target.value)}
-                  required
+          <Section aria-labelledby="shipping-address-heading" data-testid="address-section">
+            <h2 id="shipping-address-heading">1. Shipping address</h2>
+            {addresses.map(address => (
+              <Option key={address.id} data-testid="saved-address-option">
+                <input
+                  type="radio"
+                  name="address"
+                  value={address.id}
+                  checked={addressChoice === address.id}
+                  data-testid={`saved-address-radio-${address.id}`}
+                  onChange={() => setAddressChoice(address.id)}
                 />
-              </FormGroup>
-              
-              <FormRow>
-                <FormGroup>
-                  <Label htmlFor="city">City</Label>
-                  <Input
-                    id="city"
-                    data-testid="city-input"
-                    type="text"
-                    value={shippingAddress.city}
-                    onChange={(e) => handleAddressChange('city', e.target.value)}
-                    required
-                  />
-                </FormGroup>
-                
-                <FormGroup>
-                  <Label htmlFor="state">State</Label>
-                  <Input
-                    id="state"
-                    data-testid="state-input"
-                    type="text"
-                    value={shippingAddress.state}
-                    onChange={(e) => handleAddressChange('state', e.target.value)}
-                    required
-                  />
-                </FormGroup>
-              </FormRow>
-              
-              <FormRow>
-                <FormGroup>
-                  <Label htmlFor="zipCode">ZIP Code</Label>
-                  <Input
-                    id="zipCode"
-                    data-testid="zipcode-input"
-                    type="text"
-                    value={shippingAddress.zipCode}
-                    onChange={(e) => handleAddressChange('zipCode', e.target.value)}
-                    required
-                  />
-                </FormGroup>
-                
-                <FormGroup>
-                  <Label htmlFor="country">Country</Label>
-                  <Select
-                    id="country"
-                    data-testid="country-select"
-                    value={shippingAddress.country}
-                    onChange={(e) => handleAddressChange('country', e.target.value)}
-                    required
-                  >
-                    <option value="United States">United States</option>
-                    <option value="Canada">Canada</option>
-                    <option value="United Kingdom">United Kingdom</option>
-                  </Select>
-                </FormGroup>
-              </FormRow>
-            </Form>
+                <span className="grow">
+                  <strong>{address.label}</strong>{address.isDefault && ' (default)'}
+                  <br />
+                  {address.fullName}, {address.street}, {address.city}, {address.state} {address.zipCode}, {address.country}
+                </span>
+              </Option>
+            ))}
+            {addresses.length > 0 && (
+              <Option>
+                <input type="radio" name="address" value="new" checked={usingNewAddress} data-testid="new-address-radio" onChange={() => setAddressChoice('new')} />
+                <span className="grow">Use a new address</span>
+              </Option>
+            )}
+            {usingNewAddress && (
+              <>
+                <AddressForm idPrefix="shipping" value={newAddress} errors={errors} onChange={setNewAddress} />
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="checkbox" style={{ width: 'auto' }} checked={saveAddress} data-testid="save-address-checkbox" onChange={e => setSaveAddress(e.target.checked)} />
+                  Save this address to my account
+                </label>
+              </>
+            )}
           </Section>
 
-          <Section>
-            <SectionTitle>Payment Method</SectionTitle>
-            <FormGroup>
-              <Label htmlFor="paymentMethod">Payment Type</Label>
-              <Select
-                id="paymentMethod"
-                data-testid="payment-method-select"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                required
-              >
-                <option value="credit-card">Credit Card</option>
-                <option value="debit-card">Debit Card</option>
-                <option value="paypal">PayPal</option>
-              </Select>
-            </FormGroup>
+          <Section aria-labelledby="shipping-method-heading" data-testid="shipping-section">
+            <h2 id="shipping-method-heading">2. Shipping method</h2>
+            {options.map(option => {
+              const free = option.id === 'standard' && quote?.shippingMethod === 'standard' && quote.shipping === 0;
+              return (
+                <Option key={option.id}>
+                  <input
+                    type="radio"
+                    name="shipping"
+                    value={option.id}
+                    checked={shippingMethod === option.id}
+                    data-testid={`shipping-option-${option.id}`}
+                    onChange={() => setShippingMethod(option.id)}
+                  />
+                  <span className="grow">{option.label}</span>
+                  <span data-testid={`shipping-price-${option.id}`}>{free ? 'FREE' : formatCurrency(option.price)}</span>
+                </Option>
+              );
+            })}
+          </Section>
+
+          <Section aria-labelledby="payment-heading" data-testid="payment-section">
+            <h2 id="payment-heading">3. Payment</h2>
+            {([
+              ['card', 'Credit or debit card'],
+              ['paypal', 'PayPal'],
+              ['cod', `Cash on delivery (orders up to ${formatCurrency(COD_LIMIT)})`],
+            ] as [PaymentMethod, string][]).map(([value, label]) => (
+              <Option key={value}>
+                <input
+                  type="radio"
+                  name="payment"
+                  value={value}
+                  checked={paymentMethod === value}
+                  data-testid={`payment-${value}`}
+                  onChange={() => setPaymentMethod(value)}
+                />
+                <span className="grow">{label}</span>
+              </Option>
+            ))}
+            <FieldError message={errors.paymentMethod} testId="payment-method-error" />
+            {paymentMethod === 'card' && (
+              <CardGrid data-testid="card-form">
+                <div className="form-group full">
+                  <label className="form-label" htmlFor="card-name">Name on card</label>
+                  <input id="card-name" autoComplete="cc-name" value={card.name} data-testid="card-name-input" onChange={e => setCard({ ...card, name: e.target.value })} />
+                  <FieldError message={errors.cardName} testId="card-name-error" />
+                </div>
+                <div className="form-group full">
+                  <label className="form-label" htmlFor="card-number">Card number</label>
+                  <input
+                    id="card-number"
+                    inputMode="numeric"
+                    autoComplete="cc-number"
+                    placeholder="1234 5678 9012 3456"
+                    value={card.number}
+                    data-testid="card-number-input"
+                    onChange={e => setCard({ ...card, number: formatCardNumber(e.target.value) })}
+                  />
+                  <FieldError message={errors.cardNumber} testId="card-number-error" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="card-expiry">Expiry (MM/YY)</label>
+                  <input id="card-expiry" autoComplete="cc-exp" placeholder="MM/YY" maxLength={5} value={card.expiry} data-testid="card-expiry-input" onChange={e => setCard({ ...card, expiry: e.target.value })} />
+                  <FieldError message={errors.cardExpiry} testId="card-expiry-error" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="card-cvv">CVV</label>
+                  <input id="card-cvv" inputMode="numeric" autoComplete="cc-csc" maxLength={4} value={card.cvv} data-testid="card-cvv-input" onChange={e => setCard({ ...card, cvv: e.target.value })} />
+                  <FieldError message={errors.cardCvv} testId="card-cvv-error" />
+                </div>
+              </CardGrid>
+            )}
+            {paymentMethod === 'paypal' && <p data-testid="paypal-note">You will confirm the payment with PayPal after placing the order.</p>}
           </Section>
         </div>
 
-        <OrderSummary data-testid="order-summary">
-          <SectionTitle>Order Summary</SectionTitle>
-          
-          {cart.items.map((item) => (
-            <OrderItem key={item.id} data-testid="order-item">
-              <ItemInfo>
-                <h4>{item.product?.name}</h4>
-                <p>Qty: {item.quantity} × ${item.product?.price.toFixed(2)}</p>
-              </ItemInfo>
-              <ItemPrice>${item.subtotal?.toFixed(2)}</ItemPrice>
-            </OrderItem>
+        <Summary data-testid="order-summary">
+          <h2 style={{ marginBottom: 16 }}>Order summary</h2>
+          {cart.items.map(item => (
+            <div className="row" key={item.id} data-testid="order-item">
+              <span>{item.product.name} × {item.quantity}</span>
+              <span>{formatCurrency(item.subtotal)}</span>
+            </div>
           ))}
-          
-          <SummaryRow>
-            <span>Subtotal:</span>
-            <span data-testid="order-subtotal">${cart.totalAmount.toFixed(2)}</span>
-          </SummaryRow>
-          
-          <SummaryRow>
-            <span>Shipping:</span>
-            <span>Free</span>
-          </SummaryRow>
-          
-          <SummaryRow>
-            <span>Tax:</span>
-            <span data-testid="order-tax">${(cart.totalAmount * 0.08).toFixed(2)}</span>
-          </SummaryRow>
-          
-          <SummaryRow className="total">
-            <span>Total:</span>
-            <span data-testid="order-total">${(cart.totalAmount * 1.08).toFixed(2)}</span>
-          </SummaryRow>
-
-          {error && <ErrorMessage data-testid="checkout-error">{error}</ErrorMessage>}
-          
-          <PlaceOrderButton
+          <hr style={{ margin: '12px 0', border: 'none', borderTop: '1px solid #e9ecef' }} />
+          <div className="row"><span>Subtotal</span><span data-testid="order-subtotal">{formatCurrency(quote?.subtotal ?? cart.subtotal)}</span></div>
+          {quote && quote.discount > 0 && (
+            <div className="row" style={{ color: '#28a745' }}>
+              <span>Discount ({quote.couponCode})</span>
+              <span data-testid="order-discount">−{formatCurrency(quote.discount)}</span>
+            </div>
+          )}
+          <div className="row"><span>Shipping</span><span data-testid="order-shipping">{quote ? (quote.shipping === 0 ? 'FREE' : formatCurrency(quote.shipping)) : '…'}</span></div>
+          <div className="row"><span>Tax (8%)</span><span data-testid="order-tax">{quote ? formatCurrency(quote.tax) : '…'}</span></div>
+          <div className="row total"><span>Total</span><span data-testid="order-total">{quote ? formatCurrency(quote.total) : '…'}</span></div>
+          <button
+            type="button"
+            className="btn-primary"
+            style={{ width: '100%', marginTop: 16 }}
             data-testid="place-order-button"
-            onClick={handleSubmit}
-            disabled={loading}
+            disabled={placing || !quote}
+            onClick={handlePlaceOrder}
           >
-            {loading ? 'Placing Order...' : 'Place Order'}
-          </PlaceOrderButton>
-        </OrderSummary>
-      </CheckoutLayout>
-    </Container>
+            {placing ? 'Placing order...' : 'Place order'}
+          </button>
+          <Link to="/cart" style={{ display: 'block', textAlign: 'center', marginTop: 12 }} data-testid="back-to-cart">Back to cart</Link>
+        </Summary>
+      </Layout>
+    </Page>
   );
 };
 

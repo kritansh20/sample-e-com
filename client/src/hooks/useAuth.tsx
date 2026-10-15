@@ -1,16 +1,18 @@
 import { useState, useEffect, useContext, createContext, ReactNode } from 'react';
-import apiClient from '../services/apiClient';
+import apiClient, { getErrorMessage } from '../services/apiClient';
 import { User, LoginRequest, SignupRequest } from '../types';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  isAdmin: boolean;
   isLoading: boolean;
   loading: boolean;
   login: (credentials: LoginRequest) => Promise<void>;
   signup: (userData: SignupRequest) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  setCurrentUser: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,6 +22,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
 
   const isAuthenticated = !!user;
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -29,8 +32,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (token && storedUser) {
         try {
           setUser(JSON.parse(storedUser));
-          // Verify token is still valid
-          await apiClient.getCurrentUser();
+          const currentUser = await apiClient.getCurrentUser();
+          setUser(currentUser);
+          localStorage.setItem('user', JSON.stringify(currentUser));
         } catch (error) {
           console.error('Auth initialization failed:', error);
           localStorage.removeItem('authToken');
@@ -53,19 +57,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.setItem('authToken', response.token);
       localStorage.setItem('user', JSON.stringify(response.user));
       setUser(response.user);
-    } catch (error: any) {
-      console.error('Login failed:', error);
-      
-      // Extract meaningful error message from API response
-      let errorMessage = 'Login failed';
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      // Throw a new error with the meaningful message
-      throw new Error(errorMessage);
+    } catch (error) {
+      throw new Error(getErrorMessage(error, 'Login failed'));
     } finally {
       setIsLoading(false);
     }
@@ -85,6 +78,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const setCurrentUser = (updatedUser: User) => {
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
   };
 
   const logout = () => {
@@ -110,12 +108,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const value = {
     user,
     isAuthenticated,
+    isAdmin,
     isLoading,
     loading: isLoading,
     login,
     signup,
     logout,
     refreshUser,
+    setCurrentUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

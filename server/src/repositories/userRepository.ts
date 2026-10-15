@@ -10,30 +10,17 @@ class UserRepository {
   }
 
   private initializeData() {
-    // Pre-seed with test users
-    const testUsers = [
-      {
-        email: 'john@example.com',
-        password: 'Ecomm@123',
-        firstName: 'John',
-        lastName: 'Doe'
-      },
-      {
-        email: 'jane@example.com',
-        password: 'Ecomm@123',
-        firstName: 'Jane',
-        lastName: 'Smith'
-      }
+    const seedUsers: Omit<User, 'id' | 'createdAt' | 'updatedAt'>[] = [
+      { email: 'john@example.com', password: 'Ecomm@123', firstName: 'John', lastName: 'Doe', role: 'customer' },
+      { email: 'jane@example.com', password: 'Ecomm@123', firstName: 'Jane', lastName: 'Smith', role: 'customer' },
+      { email: 'admin@example.com', password: 'Admin@123', firstName: 'Ada', lastName: 'Admin', role: 'admin' },
     ];
 
-    for (const userData of testUsers) {
-      const hashedPassword = bcrypt.hashSync(userData.password, 10);
+    for (const userData of seedUsers) {
       this.users.push({
+        ...userData,
         id: uuidv4(),
-        email: userData.email,
-        password: hashedPassword,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
+        password: bcrypt.hashSync(userData.password, 10),
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -41,6 +28,11 @@ class UserRepository {
   }
 
   async findByEmail(email: string): Promise<User | null> {
+    const normalized = email.trim().toLowerCase();
+    return this.users.find(user => user.email.toLowerCase() === normalized) || null;
+  }
+
+  findByEmailSync(email: string): User | null {
     return this.users.find(user => user.email === email) || null;
   }
 
@@ -74,7 +66,7 @@ class UserRepository {
   async delete(id: string): Promise<boolean> {
     const index = this.users.findIndex(user => user.id === id);
     if (index === -1) return false;
-    
+
     this.users.splice(index, 1);
     return true;
   }

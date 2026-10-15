@@ -108,7 +108,8 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = location.state?.from?.pathname || '/';
+  const fromLocation = (location.state as { from?: { pathname: string; search?: string } } | null)?.from;
+  const from = fromLocation ? `${fromLocation.pathname}${fromLocation.search || ''}` : '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,7 +138,7 @@ const Login: React.FC = () => {
     <Container>
       <Title>Login</Title>
       
-      {error && <ErrorMessage data-cy="error-message">{error}</ErrorMessage>}
+      {error && <ErrorMessage data-cy="error-message" data-testid="login-error">{error}</ErrorMessage>}
       
       <Form onSubmit={handleSubmit}>
         <FormGroup>
@@ -174,7 +175,7 @@ const Login: React.FC = () => {
       </Form>
 
       <SignupLink>
-        Don't have an account? <Link to="/signup">Sign up here</Link>
+        Don't have an account? <Link to="/signup" data-testid="signup-link-from-login">Sign up here</Link>
       </SignupLink>
     </Container>
   );

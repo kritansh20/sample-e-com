@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { useAuth } from '../hooks/useAuth';
 import { useCart } from '../hooks/useCart';
+import { useWishlist } from '../hooks/useWishlist';
+import { useCompare } from '../hooks/useCompare';
 
 const HeaderContainer = styled.header`
   background-color: #fff;
@@ -94,8 +96,10 @@ const UserActions = styled.div`
 `;
 
 const Header: React.FC = () => {
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, isAdmin, user, logout } = useAuth();
   const { cart } = useCart();
+  const { count: wishlistCount } = useWishlist();
+  const { ids: compareIds } = useCompare();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -111,12 +115,18 @@ const Header: React.FC = () => {
         <NavLinks>
           <NavLink to="/" data-testid="home-link">Home</NavLink>
           <NavLink to="/products" data-testid="products-link">Products</NavLink>
-          <NavLink to="/wishlist" data-testid="wishlist-link">Wishlist</NavLink>
-          <NavLink to="/compare" data-testid="compare-link">Compare</NavLink>
+          <CartLink to="/compare" data-testid="compare-link">
+            Compare
+            {compareIds.length > 0 && <CartBadge data-testid="compare-badge">{compareIds.length}</CartBadge>}
+          </CartLink>
           <NavLink to="/currency" data-testid="currency-link">Currency</NavLink>
-          
+
           {isAuthenticated ? (
             <>
+              <CartLink to="/wishlist" data-testid="wishlist-link">
+                Wishlist
+                {wishlistCount > 0 && <CartBadge data-testid="wishlist-badge">{wishlistCount}</CartBadge>}
+              </CartLink>
               <CartLink to="/cart" data-testid="cart-link">
                 Cart
                 {cart && cart.totalItems > 0 && (
@@ -124,6 +134,8 @@ const Header: React.FC = () => {
                 )}
               </CartLink>
               <NavLink to="/orders" data-testid="orders-link">Orders</NavLink>
+              <NavLink to="/account" data-testid="account-link">Account</NavLink>
+              {isAdmin && <NavLink to="/admin" data-testid="admin-link">Admin</NavLink>}
             </>
           ) : null}
         </NavLinks>

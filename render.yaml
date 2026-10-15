@@ -10,7 +10,6 @@ services:
       # Baked into the bundle at build time, so changing it needs a redeploy.
       - key: REACT_APP_API_URL
         sync: false
-      # react-scripts treats lint warnings as errors when CI=true.
       - key: CI
         value: "false"
       - key: NODE_VERSION

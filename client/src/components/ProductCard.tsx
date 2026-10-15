@@ -3,20 +3,24 @@ import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 import { useAuth } from '../hooks/useAuth';
 import { useCart } from '../hooks/useCart';
+import { useWishlist } from '../hooks/useWishlist';
+import { useCompare } from '../hooks/useCompare';
 import { Product } from '../types';
+import { formatCurrency } from '../utils/format';
+
+export const LOW_STOCK_THRESHOLD = 5;
 
 const Card = styled.div`
   background: white;
   border-radius: 10px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: box-shadow 0.3s ease;
   height: 100%;
   display: flex;
   flex-direction: column;
-  
+
   &:hover {
-    transform: translateY(-5px);
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
   }
 `;
@@ -32,11 +36,6 @@ const ProductImage = styled.img`
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s ease;
-  
-  ${Card}:hover & {
-    transform: scale(1.05);
-  }
 `;
 
 const ImagePlaceholder = styled.div`
@@ -50,6 +49,32 @@ const ImagePlaceholder = styled.div`
   font-size: 14px;
 `;
 
+const SaleBadge = styled.span`
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: #dc3545;
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+`;
+
+const WishlistButton = styled.button<{ $active: boolean }>`
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: ${p => (p.$active ? '#dc3545' : '#999')};
+  font-size: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+`;
+
 const CardContent = styled.div`
   padding: 20px;
   flex: 1;
@@ -60,16 +85,12 @@ const CardContent = styled.div`
 const ProductTitle = styled.h3`
   font-size: 1.25rem;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   color: #333;
   line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 `;
 
-const ProductCategory = styled.span`
+const Meta = styled.span`
   color: #6c757d;
   font-size: 0.9rem;
   margin-bottom: 10px;
@@ -99,30 +120,30 @@ const RatingContainer = styled.div`
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-bottom: 15px;
-`;
-
-const StarRating = styled.div`
-  display: flex;
-  gap: 2px;
-`;
-
-const Star = styled.span<{ filled: boolean }>`
-  color: ${props => props.filled ? '#ffc107' : '#e9ecef'};
-  font-size: 16px;
-`;
-
-const ReviewCount = styled.span`
+  margin-bottom: 12px;
   color: #6c757d;
   font-size: 0.9rem;
 `;
 
-const StockStatus = styled.span<{ inStock: boolean }>`
+const StockStatus = styled.span<{ $tone: 'ok' | 'low' | 'out' }>`
   font-size: 0.9rem;
   font-weight: 600;
-  color: ${props => props.inStock ? '#28a745' : '#dc3545'};
-  margin-bottom: 15px;
+  color: ${p => (p.$tone === 'ok' ? '#28a745' : p.$tone === 'low' ? '#fd7e14' : '#dc3545')};
+  margin-bottom: 12px;
   display: block;
+`;
+
+const CompareLabel = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+  cursor: pointer;
+
+  input {
+    width: auto;
+  }
 `;
 
 const ButtonContainer = styled.div`
@@ -135,20 +156,16 @@ const AddToCartButton = styled.button`
   flex: 1;
   background-color: #007bff;
   color: white;
-  border: none;
-  padding: 12px 20px;
+  padding: 12px 16px;
   border-radius: 5px;
   font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-  
+
   &:hover:not(:disabled) {
     background-color: #0056b3;
   }
-  
+
   &:disabled {
     background-color: #6c757d;
-    cursor: not-allowed;
   }
 `;
 
@@ -157,16 +174,20 @@ const ViewDetailsButton = styled(Link)`
   background-color: #28a745;
   color: white;
   text-decoration: none;
-  padding: 12px 20px;
+  padding: 12px 16px;
   border-radius: 5px;
   font-weight: 600;
   text-align: center;
-  transition: background-color 0.3s ease;
-  
+
   &:hover {
     background-color: #218838;
-    color: white;
   }
+`;
+
+const Feedback = styled.div<{ $error: boolean }>`
+  font-size: 0.85rem;
+  margin-top: 8px;
+  color: ${p => (p.$error ? '#dc3545' : '#28a745')};
 `;
 
 interface ProductCardProps {
@@ -176,48 +197,44 @@ interface ProductCardProps {
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { isAuthenticated } = useAuth();
   const { addToCart } = useCart();
+  const wishlist = useWishlist();
+  const compare = useCompare();
   const [imageError, setImageError] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [feedback, setFeedback] = useState<{ text: string; error: boolean } | null>(null);
+
+  const isOutOfStock = product.stock <= 0;
+  const isLowStock = !isOutOfStock && product.stock <= LOW_STOCK_THRESHOLD;
+  const onSale = product.originalPrice !== undefined && product.originalPrice > product.price;
+  const inWishlist = wishlist.isInWishlist(product.id);
 
   const handleAddToCart = async () => {
-    if (!isAuthenticated || !product.stock || product.stock <= 0 || isAddingToCart) return;
-    
+    if (isOutOfStock || isAddingToCart) return;
+    setFeedback(null);
     try {
       setIsAddingToCart(true);
       await addToCart(product.id, 1);
-      
-      // Add a small delay to prevent rapid clicks causing race conditions
-      await new Promise(resolve => setTimeout(resolve, 300));
+      setFeedback({ text: 'Added to cart', error: false });
     } catch (error) {
-      console.error('Failed to add to cart:', error);
+      setFeedback({ text: error instanceof Error ? error.message : 'Could not add to cart', error: true });
     } finally {
       setIsAddingToCart(false);
     }
   };
 
-  const handleImageError = () => {
-    setImageError(true);
-  };
-
-  const renderStars = (rating: number) => {
-    const stars = [];
-    const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 !== 0;
-    
-    for (let i = 0; i < 5; i++) {
-      if (i < fullStars) {
-        stars.push(<Star key={i} filled={true}>★</Star>);
-      } else if (i === fullStars && hasHalfStar) {
-        stars.push(<Star key={i} filled={true}>☆</Star>);
-      } else {
-        stars.push(<Star key={i} filled={false}>☆</Star>);
-      }
+  const handleWishlist = async () => {
+    setFeedback(null);
+    try {
+      await wishlist.toggle(product.id);
+    } catch (error) {
+      setFeedback({ text: error instanceof Error ? error.message : 'Could not update wishlist', error: true });
     }
-    
-    return stars;
   };
 
-  const isOutOfStock = !product.stock || product.stock <= 0;
+  const handleCompare = () => {
+    const result = compare.toggle(product.id);
+    setFeedback(result.ok ? null : { text: result.message || 'Cannot compare more products', error: true });
+  };
 
   return (
     <Card data-testid="product-card" data-product-id={product.id}>
@@ -228,71 +245,100 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           <ProductImage
             src={product.imageUrl || 'https://via.placeholder.com/300x250?text=No+Image'}
             alt={product.name}
-            onError={handleImageError}
+            onError={() => setImageError(true)}
             data-testid="product-image"
           />
         )}
+        {onSale && (
+          <SaleBadge data-testid="sale-badge">
+            -{Math.round((1 - product.price / (product.originalPrice as number)) * 100)}%
+          </SaleBadge>
+        )}
+        {isAuthenticated && (
+          <WishlistButton
+            type="button"
+            $active={inWishlist}
+            data-testid="wishlist-toggle"
+            aria-pressed={inWishlist}
+            aria-label={inWishlist ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+            onClick={handleWishlist}
+          >
+            {inWishlist ? '♥' : '♡'}
+          </WishlistButton>
+        )}
       </ImageContainer>
-      
+
       <CardContent>
         <ProductTitle data-testid="product-name">{product.name}</ProductTitle>
-        <ProductCategory data-testid="product-category">{product.category}</ProductCategory>
-        
+        <Meta>
+          <span data-testid="product-brand">{product.brand}</span> · <span data-testid="product-category">{product.category}</span>
+        </Meta>
+
         <PriceContainer>
           <Price data-testid="product-price" data-price={product.price}>
-            ${product.price.toFixed(2)}
+            {formatCurrency(product.price)}
           </Price>
-          {product.originalPrice && product.originalPrice > product.price && (
-            <OriginalPrice data-testid="original-price">
-              ${product.originalPrice.toFixed(2)}
-            </OriginalPrice>
+          {onSale && (
+            <OriginalPrice data-testid="original-price">{formatCurrency(product.originalPrice as number)}</OriginalPrice>
           )}
         </PriceContainer>
-        
-        {product.rating && (
-          <RatingContainer data-testid="product-rating">
-            <StarRating>
-              {renderStars(product.rating)}
-            </StarRating>
-            {product.reviewCount && (
-              <ReviewCount data-testid="review-count">
-                ({product.reviewCount} reviews)
-              </ReviewCount>
-            )}
-          </RatingContainer>
-        )}
-        
-        <StockStatus 
-          inStock={!isOutOfStock} 
+
+        <RatingContainer data-testid="product-rating" data-rating={product.rating}>
+          {product.reviewCount > 0 ? (
+            <>
+              <span style={{ color: '#ffc107' }}>★</span>
+              <span>{product.rating.toFixed(1)}</span>
+              <span data-testid="review-count">({product.reviewCount} {product.reviewCount === 1 ? 'review' : 'reviews'})</span>
+            </>
+          ) : (
+            <span data-testid="review-count">No reviews yet</span>
+          )}
+        </RatingContainer>
+
+        <StockStatus
+          $tone={isOutOfStock ? 'out' : isLowStock ? 'low' : 'ok'}
           data-testid="stock-status"
-          data-stock={product.stock || 0}
+          data-stock={product.stock}
         >
-          {isOutOfStock ? 'Out of Stock' : `${product.stock} in stock`}
+          {isOutOfStock ? 'Out of Stock' : isLowStock ? `Only ${product.stock} left` : 'In stock'}
         </StockStatus>
-        
+
+        <CompareLabel>
+          <input
+            type="checkbox"
+            data-testid="compare-toggle"
+            checked={compare.isComparing(product.id)}
+            onChange={handleCompare}
+          />
+          Compare
+        </CompareLabel>
+
         <ButtonContainer>
           {isAuthenticated && (
             <AddToCartButton
+              type="button"
               data-testid="add-to-cart-button"
-              className="add-to-cart-btn"
               onClick={handleAddToCart}
               disabled={isOutOfStock || isAddingToCart}
               aria-label={`Add ${product.name} to cart`}
-              data-loading={isAddingToCart}
             >
-              {isAddingToCart ? 'Adding...' : 'Add to Cart'}
+              {isOutOfStock ? 'Out of Stock' : isAddingToCart ? 'Adding...' : 'Add to Cart'}
             </AddToCartButton>
           )}
-          
-          <ViewDetailsButton 
-            to={`/products/${product.id}`} 
+
+          <ViewDetailsButton
+            to={`/products/${product.id}`}
             data-testid="view-details-button"
-            className="view-details-btn"
             aria-label={`View details for ${product.name}`}
           >
             View Details
           </ViewDetailsButton>
         </ButtonContainer>
+        {feedback && (
+          <Feedback $error={feedback.error} role={feedback.error ? 'alert' : 'status'} data-testid="product-card-feedback">
+            {feedback.text}
+          </Feedback>
+        )}
       </CardContent>
     </Card>
   );

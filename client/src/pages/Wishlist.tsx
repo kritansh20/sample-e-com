@@ -1,129 +1,117 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import styled from 'styled-components';
+import { useWishlist } from '../hooks/useWishlist';
+import { Alert, EmptyState, Page, PageTitle } from '../components/ui';
+import { formatCurrency, formatDate } from '../utils/format';
 
-interface WishlistItem {
-  id: number;
-  name: string;
-  price: number;
-}
-
-const SAMPLE_ITEMS: WishlistItem[] = [
-  { id: 101, name: 'Blue Cotton Shirt', price: 29.99 },
-  { id: 102, name: 'Leather Wallet', price: 49.5 },
-  { id: 103, name: 'Running Shoes', price: 89.0 },
-  { id: 104, name: 'Wireless Headphones', price: 129.99 },
-  { id: 105, name: 'Stainless Water Bottle', price: 19.75 },
-];
-
-const Page = styled.div`
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 20px;
-`;
-
-const Title = styled.h1`
-  font-size: 28px;
-  margin-bottom: 20px;
-  color: #222;
-`;
-
-const Controls = styled.div`
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-`;
-
-const ItemRow = styled.div`
-  display: flex;
-  justify-content: space-between;
+const Item = styled.div`
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  gap: 16px;
   align-items: center;
-  background: white;
-  padding: 16px 20px;
+  background: #fff;
   border-radius: 8px;
-  margin-bottom: 10px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-`;
-
-const Empty = styled.div`
-  padding: 40px;
-  background: white;
-  border-radius: 8px;
-  text-align: center;
-  color: #888;
-`;
-
-const Counter = styled.div`
-  font-weight: 500;
+  padding: 16px;
   margin-bottom: 12px;
-  color: #555;
+
+  img {
+    width: 90px;
+    height: 90px;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  @media (max-width: 640px) {
+    grid-template-columns: 70px 1fr;
+
+    .actions {
+      grid-column: 1 / -1;
+      justify-content: flex-start;
+    }
+  }
 `;
 
 export default function Wishlist() {
-  const [items, setItems] = useState<WishlistItem[]>([]);
-  const [nextIdx, setNextIdx] = useState(0);
+  const { wishlist, loading, remove, moveToCart } = useWishlist();
+  const [message, setMessage] = useState<{ text: string; variant: 'success' | 'error' } | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const addSample = () => {
-    const candidate = SAMPLE_ITEMS[nextIdx % SAMPLE_ITEMS.length];
-    if (items.some((i) => i.id === candidate.id)) {
-      setNextIdx((n) => n + 1);
-      return;
+  const act = async (productId: string, action: () => Promise<void>, success: string) => {
+    setBusyId(productId);
+    setMessage(null);
+    try {
+      await action();
+      setMessage({ text: success, variant: 'success' });
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : 'Something went wrong', variant: 'error' });
+    } finally {
+      setBusyId(null);
     }
-    setItems((prev) => [...prev, candidate]);
-    setNextIdx((n) => n + 1);
   };
 
-  const remove = (id: number) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
-  };
-
-  const clearAll = () => setItems([]);
+  const items = wishlist?.items || [];
 
   return (
     <Page data-testid="wishlist-page">
-      <Title>My Wishlist</Title>
-      <Controls>
-        <button
-          className="btn-primary"
-          data-testid="wishlist-add-sample"
-          onClick={addSample}
-        >
-          Add Sample Item
-        </button>
-        <button
-          className="btn-danger"
-          data-testid="wishlist-clear-all"
-          onClick={clearAll}
-          disabled={items.length === 0}
-        >
-          Clear All
-        </button>
-      </Controls>
-      <Counter data-testid="wishlist-count">
-        Items: {items.length}
-      </Counter>
-      {items.length === 0 ? (
-        <Empty>
-          Your wishlist is empty. Add an item to get started.
-        </Empty>
+      <PageTitle>My Wishlist</PageTitle>
+      <p style={{ marginBottom: 16 }} data-testid="wishlist-count">
+        {items.length} {items.length === 1 ? 'item' : 'items'}
+      </p>
+      {message && <Alert variant={message.variant} testId="wishlist-message">{message.text}</Alert>}
+
+      {loading && !wishlist ? (
+        <EmptyState>Loading your wishlist...</EmptyState>
+      ) : items.length === 0 ? (
+        <EmptyState data-testid="wishlist-empty">
+          <p>Your wishlist is empty.</p>
+          <Link to="/products" className="btn-primary" style={{ display: 'inline-block', marginTop: 16, padding: '10px 20px', textDecoration: 'none', borderRadius: 4 }}>
+            Browse products
+          </Link>
+        </EmptyState>
       ) : (
         <div data-testid="wishlist-list">
-          {items.map((item) => (
-            <ItemRow key={item.id} data-testid="wishlist-item">
+          {items.map(({ product, productId, addedAt }) => (
+            <Item key={productId} data-testid="wishlist-item" data-product-id={productId}>
+              <img src={product.imageUrl} alt={product.name} />
               <div>
-                <div data-testid="wishlist-item-name">{item.name}</div>
-                <div data-testid="wishlist-item-price">
-                  ${item.price.toFixed(2)}
+                <Link to={`/products/${productId}`} data-testid="wishlist-item-name" style={{ fontWeight: 600, color: '#333' }}>
+                  {product.name}
+                </Link>
+                <div data-testid="wishlist-item-price">{formatCurrency(product.price)}</div>
+                <div style={{ fontSize: '0.85rem', color: product.stock > 0 ? '#28a745' : '#dc3545' }} data-testid="wishlist-item-stock">
+                  {product.stock > 0 ? 'In stock' : 'Out of stock'}
                 </div>
+                <div style={{ fontSize: '0.8rem', color: '#6c757d' }}>Added {formatDate(addedAt)}</div>
               </div>
-              <button
-                className="btn-outline"
-                data-testid="wishlist-remove-button"
-                onClick={() => remove(item.id)}
-              >
-                Remove
-              </button>
-            </ItemRow>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  data-testid="wishlist-move-to-cart"
+                  disabled={product.stock === 0 || busyId === productId}
+                  onClick={() => act(productId, () => moveToCart(productId), `${product.name} moved to your cart.`)}
+                >
+                  Move to cart
+                </button>
+                <button
+                  type="button"
+                  className="btn-danger"
+                  data-testid="wishlist-remove-button"
+                  disabled={busyId === productId}
+                  onClick={() => act(productId, () => remove(productId), `${product.name} removed from your wishlist.`)}
+                >
+                  Remove
+                </button>
+              </div>
+            </Item>
           ))}
         </div>
       )}

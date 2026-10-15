@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthTokenPayload } from '../models';
+import userRepository from '../repositories/userRepository';
 
 export interface AuthenticatedRequest extends Request {
   user?: AuthTokenPayload;
@@ -52,6 +53,22 @@ export const optionalAuth = (
       // Token is invalid, but we continue without user info
     }
   }
-  
+
+  next();
+};
+
+export const requireAdmin = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const user = req.user ? await userRepository.findById(req.user.userId) : null;
+  if (!user || user.role !== 'admin') {
+    res.status(403).json({
+      success: false,
+      error: 'Admin access required'
+    });
+    return;
+  }
   next();
 };

@@ -1,332 +1,278 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import styled from 'styled-components';
-import { Product } from '../types';
+import apiClient, { getErrorMessage } from '../services/apiClient';
 import { useAuth } from '../hooks/useAuth';
 import { useCart } from '../hooks/useCart';
-import apiClient from '../services/apiClient';
+import { useWishlist } from '../hooks/useWishlist';
+import { useCompare } from '../hooks/useCompare';
+import { Product } from '../types';
+import { Alert, Page, Stars } from '../components/ui';
+import ProductReviews from '../components/ProductReviews';
+import { LOW_STOCK_THRESHOLD } from '../components/ProductCard';
+import { formatCurrency } from '../utils/format';
 
-const Container = styled.div`
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-`;
+const MAX_PER_ITEM = 10;
 
-const ProductLayout = styled.div`
+const Layout = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 60px;
-  margin-bottom: 60px;
-  
+  gap: 40px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 24px;
+
   @media (max-width: 768px) {
     grid-template-columns: 1fr;
-    gap: 30px;
   }
 `;
 
-const ImageSection = styled.div`
-  display: flex;
-  justify-content: center;
-`;
-
-const ProductImage = styled.img`
+const Image = styled.img`
   width: 100%;
-  max-width: 500px;
-  height: auto;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  height: 400px;
+  object-fit: cover;
+  border-radius: 8px;
 `;
 
-const ProductInfo = styled.div`
-  padding: 20px 0;
-`;
-
-const Category = styled.span`
-  background-color: #f8f9fa;
-  color: #6c757d;
-  padding: 6px 12px;
-  border-radius: 6px;
+const Breadcrumb = styled.nav`
   font-size: 0.9rem;
-  font-weight: 500;
-  margin-bottom: 15px;
-  display: inline-block;
-`;
+  color: #6c757d;
+  margin-bottom: 16px;
 
-const ProductName = styled.h1`
-  font-size: 2.5rem;
-  margin-bottom: 15px;
-  color: #333;
-  line-height: 1.2;
-  
-  @media (max-width: 768px) {
-    font-size: 2rem;
+  a {
+    color: #007bff;
+    text-decoration: none;
   }
 `;
 
-const Price = styled.div`
-  font-size: 2rem;
-  font-weight: bold;
-  color: #007bff;
-  margin-bottom: 20px;
+const PriceRow = styled.div`
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 12px 0;
+
+  .price {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #28a745;
+  }
+
+  .original {
+    color: #6c757d;
+    text-decoration: line-through;
+  }
+
+  .save {
+    color: #dc3545;
+    font-weight: 600;
+  }
 `;
 
-const Rating = styled.div`
+const QuantityRow = styled.div`
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 20px;
-  font-size: 1rem;
-  color: #666;
-`;
+  gap: 8px;
+  margin: 20px 0;
 
-const Stars = styled.span`
-  color: #ffc107;
-  font-size: 1.2rem;
-`;
+  input {
+    width: 70px;
+    text-align: center;
+  }
 
-const Description = styled.p`
-  font-size: 1.1rem;
-  line-height: 1.6;
-  color: #555;
-  margin-bottom: 30px;
-`;
-
-const Stock = styled.div<{ inStock: boolean }>`
-  font-weight: 500;
-  margin-bottom: 30px;
-  color: ${props => props.inStock ? '#28a745' : '#dc3545'};
+  button {
+    padding: 8px 14px;
+    background: #e9ecef;
+  }
 `;
 
 const Actions = styled.div`
   display: flex;
-  gap: 15px;
-  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
-`;
-
-const QuantitySelector = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 10px;
-`;
-
-const QuantityButton = styled.button`
-  width: 35px;
-  height: 35px;
-  border: 1px solid #ddd;
-  background: white;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  
-  &:hover:not(:disabled) {
-    background-color: #f8f9fa;
-  }
-  
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
-const QuantityInput = styled.input`
-  width: 60px;
-  padding: 8px;
-  text-align: center;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-`;
-
-const AddToCartButton = styled.button`
-  background-color: #007bff;
-  color: white;
-  border: none;
-  padding: 15px 30px;
-  border-radius: 8px;
-  font-size: 1.1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  
-  &:hover:not(:disabled) {
-    background-color: #0056b3;
-  }
-  
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-`;
-
-const BackButton = styled.button`
-  background-color: transparent;
-  color: #007bff;
-  border: 2px solid #007bff;
-  padding: 10px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-bottom: 20px;
-  
-  &:hover {
-    background-color: #007bff;
-    color: white;
-  }
 `;
 
 const ProductDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated } = useAuth();
   const { addToCart } = useCart();
+  const wishlist = useWishlist();
+  const compare = useCompare();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const [addingToCart, setAddingToCart] = useState(false);
+  const [quantityError, setQuantityError] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; variant: 'success' | 'error' } | null>(null);
+  const [adding, setAdding] = useState(false);
 
-  useEffect(() => {
-    const fetchProduct = async () => {
-      if (!id) return;
-      
-      try {
-        setLoading(true);
-        const productData = await apiClient.getProduct(id);
-        setProduct(productData);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load product');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProduct();
+  const loadProduct = useCallback(async () => {
+    if (!id) return;
+    try {
+      setProduct(await apiClient.getProduct(id));
+      setError(null);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load product'));
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  const handleAddToCart = async () => {
-    if (!product || !isAuthenticated) return;
-    
-    try {
-      setAddingToCart(true);
-      await addToCart(product.id, quantity);
-    } catch (error) {
-      console.error('Failed to add to cart:', error);
-    } finally {
-      setAddingToCart(false);
-    }
-  };
-
-  const adjustQuantity = (delta: number) => {
-    const newQuantity = quantity + delta;
-    if (newQuantity >= 1 && (!product || newQuantity <= product.stock)) {
-      setQuantity(newQuantity);
-    }
-  };
-
-  const renderStars = (rating: number) => {
-    return '★'.repeat(Math.floor(rating)) + '☆'.repeat(5 - Math.floor(rating));
-  };
+  useEffect(() => {
+    setLoading(true);
+    setQuantity(1);
+    loadProduct();
+  }, [loadProduct]);
 
   if (loading) {
-    return (
-      <Container>
-        <div className="loading">Loading product...</div>
-      </Container>
-    );
+    return <Page><div className="loading" data-testid="product-loading">Loading product...</div></Page>;
   }
 
   if (error || !product) {
     return (
-      <Container>
-        <BackButton onClick={() => navigate(-1)}>← Back</BackButton>
-        <div style={{ textAlign: 'center', color: '#dc3545', padding: '40px' }}>
-          {error || 'Product not found'}
+      <Page>
+        <button type="button" className="btn-outline" onClick={() => navigate('/products')} data-testid="back-to-products">← Back to products</button>
+        <div style={{ textAlign: 'center', padding: 40 }} data-testid="product-not-found">
+          <h2>Product not found</h2>
+          <p style={{ color: '#6c757d' }}>{error}</p>
         </div>
-      </Container>
+      </Page>
     );
   }
 
+  const maxQuantity = Math.min(product.stock, MAX_PER_ITEM);
+  const onSale = product.originalPrice !== undefined && product.originalPrice > product.price;
+  const inWishlist = wishlist.isInWishlist(product.id);
+
+  const changeQuantity = (value: number) => {
+    if (!Number.isInteger(value) || value < 1) {
+      setQuantityError('Quantity must be at least 1');
+      setQuantity(1);
+      return;
+    }
+    if (value > maxQuantity) {
+      setQuantityError(product.stock < MAX_PER_ITEM ? `Only ${product.stock} available` : `You can buy at most ${MAX_PER_ITEM} of each item`);
+      setQuantity(maxQuantity);
+      return;
+    }
+    setQuantityError(null);
+    setQuantity(value);
+  };
+
+  const handleAddToCart = async () => {
+    setMessage(null);
+    setAdding(true);
+    try {
+      await addToCart(product.id, quantity);
+      setMessage({ text: `Added ${quantity} × ${product.name} to your cart.`, variant: 'success' });
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : 'Could not add to cart', variant: 'error' });
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleWishlist = async () => {
+    setMessage(null);
+    try {
+      await wishlist.toggle(product.id);
+      setMessage({ text: inWishlist ? 'Removed from your wishlist.' : 'Saved to your wishlist.', variant: 'success' });
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : 'Could not update wishlist', variant: 'error' });
+    }
+  };
+
+  const handleCompare = () => {
+    const result = compare.toggle(product.id);
+    setMessage(result.ok ? null : { text: result.message || 'Cannot compare more products', variant: 'error' });
+  };
+
   return (
-    <Container>
-      <BackButton onClick={() => navigate(-1)}>← Back</BackButton>
-      
-      <ProductLayout>
-        <ImageSection>
-          <ProductImage 
-            src={product.imageUrl} 
-            alt={product.name}
-            onError={(e) => {
-              e.currentTarget.src = 'https://via.placeholder.com/500x400?text=No+Image';
-            }}
-          />
-        </ImageSection>
+    <Page>
+      <Breadcrumb aria-label="Breadcrumb" data-testid="breadcrumb">
+        <Link to="/">Home</Link> / <Link to="/products">Products</Link> /{' '}
+        <Link to={`/products?category=${encodeURIComponent(product.category)}`} data-testid="breadcrumb-category">{product.category}</Link> / {product.name}
+      </Breadcrumb>
 
-        <ProductInfo>
-          <Category>{product.category}</Category>
-          <ProductName>{product.name}</ProductName>
-          <Price>${product.price.toFixed(2)}</Price>
-          
-          <Rating>
-            <Stars>{renderStars(product.rating || 0)}</Stars>
-            <span>{product.rating}/5 ({product.reviewCount} reviews)</span>
-          </Rating>
-          
-          <Description>{product.description}</Description>
-          
-          <Stock inStock={product.stock > 0}>
-            {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
-          </Stock>
+      <Layout>
+        <Image
+          src={product.imageUrl}
+          alt={product.name}
+          data-testid="product-detail-image"
+          onError={e => {
+            e.currentTarget.src = 'https://via.placeholder.com/500x400?text=No+Image';
+          }}
+        />
 
-          {isAuthenticated && product.stock > 0 && (
-            <Actions>
-              <QuantitySelector>
-                <span>Quantity:</span>
-                <QuantityButton 
-                  onClick={() => adjustQuantity(-1)}
-                  disabled={quantity <= 1}
-                >
-                  -
-                </QuantityButton>
-                <QuantityInput 
-                  type="number" 
-                  value={quantity}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value);
-                    if (val >= 1 && val <= product.stock) {
-                      setQuantity(val);
-                    }
-                  }}
-                  min={1}
-                  max={product.stock}
-                />
-                <QuantityButton 
-                  onClick={() => adjustQuantity(1)}
-                  disabled={quantity >= product.stock}
-                >
-                  +
-                </QuantityButton>
-              </QuantitySelector>
-              
-              <AddToCartButton
-                onClick={handleAddToCart}
-                disabled={addingToCart}
-              >
-                {addingToCart ? 'Adding...' : 'Add to Cart'}
-              </AddToCartButton>
-            </Actions>
+        <div>
+          <div style={{ color: '#6c757d' }} data-testid="product-detail-brand">{product.brand}</div>
+          <h1 data-testid="product-detail-name">{product.name}</h1>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }} data-testid="product-detail-rating">
+            <Stars rating={product.rating} />
+            <span>{product.reviewCount ? `${product.rating.toFixed(1)} (${product.reviewCount} ${product.reviewCount === 1 ? 'review' : 'reviews'})` : 'No reviews yet'}</span>
+          </div>
+          <PriceRow>
+            <span className="price" data-testid="product-detail-price">{formatCurrency(product.price)}</span>
+            {onSale && (
+              <>
+                <span className="original" data-testid="product-detail-original-price">{formatCurrency(product.originalPrice as number)}</span>
+                <span className="save" data-testid="product-detail-savings">You save {formatCurrency((product.originalPrice as number) - product.price)}</span>
+              </>
+            )}
+          </PriceRow>
+          <p data-testid="product-detail-description">{product.description}</p>
+          <p
+            style={{ marginTop: 12, fontWeight: 600, color: product.stock === 0 ? '#dc3545' : product.stock <= LOW_STOCK_THRESHOLD ? '#fd7e14' : '#28a745' }}
+            data-testid="product-detail-stock"
+          >
+            {product.stock === 0 ? 'Out of stock' : product.stock <= LOW_STOCK_THRESHOLD ? `Only ${product.stock} left in stock` : 'In stock'}
+          </p>
+
+          {message && <div style={{ marginTop: 16 }}><Alert variant={message.variant} testId="product-detail-message">{message.text}</Alert></div>}
+
+          {isAuthenticated ? (
+            <>
+              {product.stock > 0 && (
+                <QuantityRow>
+                  <label htmlFor="quantity">Quantity</label>
+                  <button type="button" aria-label="Decrease quantity" data-testid="quantity-decrease" disabled={quantity <= 1} onClick={() => changeQuantity(quantity - 1)}>−</button>
+                  <input
+                    id="quantity"
+                    type="number"
+                    min={1}
+                    max={maxQuantity}
+                    value={quantity}
+                    data-testid="quantity-input"
+                    onChange={e => changeQuantity(parseInt(e.target.value, 10))}
+                  />
+                  <button type="button" aria-label="Increase quantity" data-testid="quantity-increase" disabled={quantity >= maxQuantity} onClick={() => changeQuantity(quantity + 1)}>+</button>
+                </QuantityRow>
+              )}
+              {quantityError && <div className="error-message" role="alert" data-testid="quantity-error" style={{ marginBottom: 12 }}>{quantityError}</div>}
+              <Actions>
+                <button type="button" className="btn-primary" data-testid="add-to-cart-button" disabled={product.stock === 0 || adding} onClick={handleAddToCart}>
+                  {product.stock === 0 ? 'Out of Stock' : adding ? 'Adding...' : 'Add to Cart'}
+                </button>
+                <button type="button" className="btn-outline" data-testid="wishlist-toggle" aria-pressed={inWishlist} onClick={handleWishlist}>
+                  {inWishlist ? '♥ In Wishlist' : '♡ Add to Wishlist'}
+                </button>
+                <button type="button" className="btn-secondary" data-testid="compare-toggle" aria-pressed={compare.isComparing(product.id)} onClick={handleCompare}>
+                  {compare.isComparing(product.id) ? 'Remove from Compare' : 'Add to Compare'}
+                </button>
+              </Actions>
+            </>
+          ) : (
+            <p style={{ marginTop: 20 }} data-testid="login-to-buy">
+              <Link to="/login" state={{ from: location }}>Log in</Link> to add items to your cart or wishlist.
+            </p>
           )}
+        </div>
+      </Layout>
 
-          {!isAuthenticated && (
-            <div style={{ color: '#666', fontStyle: 'italic' }}>
-              Please log in to add items to cart
-            </div>
-          )}
-        </ProductInfo>
-      </ProductLayout>
-    </Container>
+      <ProductReviews productId={product.id} onStatsChange={loadProduct} />
+    </Page>
   );
 };
 

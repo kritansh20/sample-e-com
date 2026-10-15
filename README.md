@@ -4,22 +4,22 @@ A full-stack e-commerce application built with Node.js, Express, TypeScript (bac
 
 ## Features
 
-### Backend (Server)
-- **Authentication**: JWT-based user authentication with signup/login
-- **Products**: CRUD operations, search, filtering, pagination, featured products
-- **Shopping Cart**: Add/remove items, update quantities, cart management
-- **Orders**: Order creation, history, status tracking, cancellation
-- **Database**: In-memory storage with repository pattern (easily extensible to real databases)
-- **Testing**: Jest, ts-jest and Supertest set up; no tests yet
-- **Type Safety**: Full TypeScript implementation
+An in-memory store with realistic flows, validation and edge states. Every interactive element has a `data-testid`.
 
-### Frontend (Client)
-- **Modern React**: Hooks, Context API, functional components
-- **Routing**: React Router with protected routes
-- **Styling**: Styled Components with responsive design
-- **State Management**: Custom hooks for auth and cart management
-- **Testing**: Jest, React Testing Library, Cypress and Selenium set up; no tests yet
-- **Type Safety**: Full TypeScript implementation
+| Area | What it does |
+|---|---|
+| Accounts | Sign up (name, email and password rules, confirm password, terms), log in and out, redirect back to the page you came from, admin role |
+| Catalog | 24 products in 6 categories; search (name, brand, description); category, price range, minimum rating, in-stock and on-sale filters; 6 sort orders; 12 per page; filters kept in the URL |
+| Product page | Breadcrumb, sale price and savings, low-stock and out-of-stock states, quantity limits, add to cart, wishlist, compare |
+| Reviews | Rating summary and distribution, sort, write a review (1-5 stars, title, text) with validation, one review per customer, "Verified purchase" for delivered orders, delete your own review |
+| Wishlist | Saved per account; add or remove from cards and product pages, move to cart, header count |
+| Compare | Up to 3 products side by side, lowest price and top rated highlighted, kept across page loads |
+| Cart | Quantity limits (stock and 10 per item), save for later, remove, clear with confirmation, coupons, free-shipping progress |
+| Checkout | Saved address or new address with per-country postal codes, save the address, 3 shipping methods, card / PayPal / cash on delivery with card validation, totals calculated by the server |
+| Orders | Filter by status, order page with status timeline, estimated delivery, cancel with a reason (pending or processing only), buy again |
+| My Account | Edit name, change password, address book (up to 5, one default) |
+| Admin | Dashboard stats, add / edit / delete products with validation, move orders through allowed status changes |
+| Extras | Currency converter page |
 
 ## Project Structure
 
@@ -28,7 +28,9 @@ sample-e-com/
 ├── server/                 # Backend API
 │   ├── src/
 │   │   ├── controllers/    # Request handlers
-│   │   ├── services/       # Business logic
+│   │   ├── data/           # Seed data (products, reviews, orders, addresses)
+│   │   ├── services/       # Pricing, cart totals, coupons
+│   │   ├── utils/          # Validation helpers
 │   │   ├── repositories/   # Data access layer
 │   │   ├── models/         # Data models and types
 │   │   ├── middleware/     # Auth and other middleware
@@ -144,47 +146,69 @@ Seeded users (in memory, reset when the server restarts): `john@example.com` / `
 
 ## API Endpoints
 
-### Authentication
-- `POST /api/auth/signup` - User registration
-- `POST /api/auth/login` - User login
-- `GET /api/auth/profile` - Get user profile (protected)
+All responses are `{ success, data }` or `{ success: false, error, fields? }`; `fields` maps form fields to messages on 400 validation errors.
 
-### Products
-- `GET /api/products` - Get products with pagination, search, filtering
-- `GET /api/products/:id` - Get product by ID
-- `GET /api/products/featured` - Get featured products
-- `GET /api/products/categories` - Get product categories
+### Auth
+- `POST /api/auth/signup`, `POST /api/auth/login`, `POST /api/auth/logout`
+- `GET /api/auth/profile`, `PUT /api/auth/profile` (first and last name), `PUT /api/auth/password` (current and new password)
 
-### Cart (Protected Routes)
-- `GET /api/cart` - Get user's cart
-- `POST /api/cart` - Add item to cart
-- `PUT /api/cart/:itemId` - Update cart item quantity
-- `DELETE /api/cart/:itemId` - Remove item from cart
-- `DELETE /api/cart` - Clear entire cart
+### Products and reviews
+- `GET /api/products` with `search`, `category`, `minPrice`, `maxPrice`, `minRating`, `inStock=true`, `onSale=true`, `featured=true`, `sort` (`relevance`, `price_asc`, `price_desc`, `rating`, `newest`, `name`), `page`, `limit` (1-50)
+- `GET /api/products/featured`, `GET /api/products/categories`, `GET /api/products/:id`
+- `GET /api/products/:id/reviews?sort=newest|highest|lowest`, `POST /api/products/:id/reviews`, `DELETE /api/products/:id/reviews/:reviewId`
 
-### Orders (Protected Routes)
-- `POST /api/orders` - Create new order
-- `GET /api/orders` - Get user's orders
-- `GET /api/orders/:id` - Get order by ID
-- `PUT /api/orders/:id/cancel` - Cancel order
+### Cart, coupons and wishlist (logged in)
+- `GET /api/cart`, `POST /api/cart`, `PUT /api/cart/:itemId`, `DELETE /api/cart/:itemId`, `DELETE /api/cart`
+- `POST /api/cart/:itemId/move-to-wishlist`, `POST /api/cart/coupon` (`{ code }`), `DELETE /api/cart/coupon`
+- `GET /api/wishlist`, `POST /api/wishlist` (`{ productId }`), `DELETE /api/wishlist/:productId`, `POST /api/wishlist/:productId/move-to-cart`
 
-## Features Walkthrough
+### Checkout and orders (logged in)
+- `GET /api/orders/shipping-options`, `POST /api/orders/quote` (`{ shippingMethod }`)
+- `POST /api/orders` (`addressId` or `shippingAddress` + `saveAddress`, `shippingMethod`, `paymentMethod` `card|paypal|cod`, `cardLast4` for card)
+- `GET /api/orders?status=`, `GET /api/orders/:id`, `PUT /api/orders/:id/cancel` (`{ reason }`), `POST /api/orders/:id/reorder`
 
-### User Journey
-1. **Browse Products**: View featured products on homepage, browse all products with search/filter
-2. **Authentication**: Sign up or log in to access cart and orders
-3. **Shopping**: Add products to cart, adjust quantities
-4. **Checkout**: Enter shipping address, select payment method
-5. **Order Management**: View order history, track status, cancel pending orders
+### Addresses (logged in)
+- `GET /api/addresses`, `POST /api/addresses`, `PUT /api/addresses/:id`, `PUT /api/addresses/:id/default`, `DELETE /api/addresses/:id`
 
-### Technical Features
-- **Responsive Design**: Mobile-first approach with breakpoints
-- **Error Handling**: Comprehensive error handling on both client and server
-- **Loading States**: Loading indicators throughout the application
-- **Form Validation**: Client-side and server-side validation
-- **Protected Routes**: Authentication required for cart, checkout, orders
-- **Pagination**: Efficient loading of large product lists
-- **Search & Filter**: Real-time product search and category filtering
+### Admin (admin role)
+- `GET /api/admin/stats`
+- `GET /api/admin/products?search=`, `POST /api/admin/products`, `PUT /api/admin/products/:id`, `DELETE /api/admin/products/:id`
+- `GET /api/admin/orders?status=`, `PUT /api/admin/orders/:id/status` (`{ status }`)
+
+## Business Rules
+
+| Rule | Value |
+|---|---|
+| Quantity per cart line | Whole number, at most the stock and at most 10 |
+| Tax | 8% of the order after discount |
+| Shipping | Standard $5.99 (free from $100 after discount, or with `FREESHIP`), Express $14.99, Overnight $29.99 |
+| Estimated delivery | Standard 7 days, Express 3 days, Overnight 1 day |
+| Cash on delivery | Orders up to $500 |
+| Order cancel | Customer: pending or processing. Admin: pending → processing or cancelled, processing → shipped or cancelled, shipped → delivered. Cancelling returns stock |
+| Passwords | At least 8 characters with a letter and a number |
+| Postal codes | US `94110` or `94110-1234`, Canada `K1A 0B1`, UK `SW1A 1AA`, India `560001`; state or province required except in the UK |
+| Address book | Up to 5 addresses; the first one is the default |
+| Reviews | Rating 1-5, title 3-80 characters, text 10-1000 characters, one per customer per product |
+
+## Seeded Test Data
+
+All data lives in memory and resets when the server restarts.
+
+| Users | Password | Notes |
+|---|---|---|
+| `john@example.com` | `Ecomm@123` | Customer. 1 saved address, 2 wishlist items, orders ORD-1001 (delivered), ORD-1002 (shipped), ORD-1003 (pending) |
+| `jane@example.com` | `Ecomm@123` | Customer. Order ORD-1004 (processing), no saved address |
+| `admin@example.com` | `Admin@123` | Admin |
+
+| Coupon | Effect |
+|---|---|
+| `WELCOME10` | 10% off |
+| `SAVE20` | $20 off orders of $150 or more (removed automatically if the cart drops below $150) |
+| `FREESHIP` | Free standard shipping |
+| `BOOKS15` | 15% off Books items only |
+| `SUMMER25` | Expired |
+
+Products: 24 across Books, Clothing, Electronics, Footwear, Home & Kitchen and Sports. 6 are on sale, 2 are out of stock (Kindle Paperwhite, Nespresso Vertuo Coffee Maker), 3 are low stock (Sony WH-1000XM5 Headphones: 3, Timberland boot: 2, Adjustable Dumbbells: 5), and 8 have no reviews yet.
 
 ## Technology Stack
 
@@ -272,8 +296,7 @@ The frontend is deployed as a Render **Static Site** described by
   redeploy):
   - `REACT_APP_API_URL` — deployed backend URL **including the `/api` suffix**,
     e.g. `https://server-puce-gamma-22.vercel.app/api`.
-  - `CI=false` — with `CI=true`, `react-scripts build` fails on the app's two
-    `react-hooks/exhaustive-deps` lint warnings.
+  - `CI=false` — optional; the build has no lint warnings, so `CI=true` also works.
   - `NODE_VERSION=20`.
 
 Render auto-deploys on pushes to `main`. To trigger manually, use

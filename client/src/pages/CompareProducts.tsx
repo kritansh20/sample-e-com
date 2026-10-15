@@ -1,208 +1,128 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import styled from 'styled-components';
-
-interface CompareProduct {
-  id: string;
-  name: string;
-  price: number;
-  rating: number;
-  stock: number;
-  category: string;
-}
-
-const SAMPLES: Record<string, CompareProduct> = {
-  A: {
-    id: 'A',
-    name: 'Product A - Classic Watch',
-    price: 199.0,
-    rating: 4.5,
-    stock: 20,
-    category: 'Accessories',
-  },
-  B: {
-    id: 'B',
-    name: 'Product B - Smart Watch',
-    price: 249.0,
-    rating: 4.2,
-    stock: 12,
-    category: 'Electronics',
-  },
-  C: {
-    id: 'C',
-    name: 'Product C - Fitness Band',
-    price: 89.5,
-    rating: 4.0,
-    stock: 35,
-    category: 'Electronics',
-  },
-};
-
-const Page = styled.div`
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 20px;
-`;
-
-const Title = styled.h1`
-  font-size: 28px;
-  margin-bottom: 20px;
-  color: #222;
-`;
-
-const Controls = styled.div`
-  display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-`;
+import apiClient from '../services/apiClient';
+import { MAX_COMPARE, useCompare } from '../hooks/useCompare';
+import { Product } from '../types';
+import { EmptyState, Page, PageTitle } from '../components/ui';
+import { formatCurrency } from '../utils/format';
 
 const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
-  background: white;
+  background: #fff;
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 
-  th,
-  td {
-    padding: 12px 16px;
+  th, td {
+    padding: 12px;
+    border-bottom: 1px solid #e9ecef;
     text-align: left;
-    border-bottom: 1px solid #eee;
+    vertical-align: top;
   }
 
-  th {
-    background: #f6f8fa;
+  th[scope='row'] {
+    width: 160px;
+    color: #6c757d;
     font-weight: 600;
-    color: #333;
   }
 `;
 
-const Empty = styled.div`
-  padding: 40px;
-  background: white;
-  border-radius: 8px;
-  text-align: center;
-  color: #888;
+const Best = styled.span`
+  margin-left: 6px;
+  font-size: 0.75rem;
+  background: #d4edda;
+  color: #155724;
+  padding: 2px 6px;
+  border-radius: 4px;
 `;
+
+const ROWS: { key: string; label: string; render: (p: Product) => React.ReactNode }[] = [
+  { key: 'price', label: 'Price', render: p => formatCurrency(p.price) },
+  { key: 'brand', label: 'Brand', render: p => p.brand },
+  { key: 'category', label: 'Category', render: p => p.category },
+  { key: 'rating', label: 'Rating', render: p => (p.reviewCount ? `${p.rating.toFixed(1)} (${p.reviewCount})` : 'No reviews') },
+  { key: 'stock', label: 'Availability', render: p => (p.stock === 0 ? 'Out of stock' : p.stock <= 5 ? `Only ${p.stock} left` : 'In stock') },
+];
 
 export default function CompareProducts() {
-  const [selected, setSelected] = useState<CompareProduct[]>([]);
+  const { ids, remove, clear } = useCompare();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [missing, setMissing] = useState(0);
 
-  const addSample = (key: 'A' | 'B' | 'C') => {
-    const p = SAMPLES[key];
-    if (selected.some((s) => s.id === p.id)) return;
-    setSelected((prev) => [...prev, p]);
-  };
+  useEffect(() => {
+    let active = true;
+    Promise.all(ids.map(id => apiClient.getProduct(id).catch(() => null))).then(results => {
+      if (!active) return;
+      const found = results.filter((p): p is Product => p !== null);
+      setProducts(found);
+      setMissing(results.length - found.length);
+    });
+    return () => {
+      active = false;
+    };
+  }, [ids]);
 
-  const remove = (id: string) => {
-    setSelected((prev) => prev.filter((p) => p.id !== id));
-  };
-
-  const clearAll = () => setSelected([]);
+  const cheapest = products.length > 1 ? Math.min(...products.map(p => p.price)) : null;
+  const bestRated = products.length > 1 ? Math.max(...products.map(p => p.rating)) : null;
 
   return (
     <Page data-testid="compare-page">
-      <Title>Compare Products</Title>
-      <Controls>
-        <button
-          className="btn-primary"
-          data-testid="compare-add-a"
-          onClick={() => addSample('A')}
-        >
-          Add Product A
+      <PageTitle>Compare Products</PageTitle>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <span data-testid="compare-count">{ids.length} of {MAX_COMPARE} selected</span>
+        <button type="button" className="btn-outline" data-testid="compare-clear-button" disabled={ids.length === 0} onClick={clear}>
+          Clear all
         </button>
-        <button
-          className="btn-primary"
-          data-testid="compare-add-b"
-          onClick={() => addSample('B')}
-        >
-          Add Product B
-        </button>
-        <button
-          className="btn-primary"
-          data-testid="compare-add-c"
-          onClick={() => addSample('C')}
-        >
-          Add Product C
-        </button>
-        <button
-          className="btn-danger"
-          data-testid="compare-clear-button"
-          onClick={clearAll}
-          disabled={selected.length === 0}
-        >
-          Clear
-        </button>
-      </Controls>
+      </div>
+      {missing > 0 && <p style={{ color: '#856404' }} data-testid="compare-missing">Some products are no longer available.</p>}
 
-      <div data-testid="compare-count">Selected: {selected.length}</div>
+      {ids.length === 0 ? (
+        <EmptyState data-testid="compare-empty">
+          <p>No products selected. Tick "Compare" on up to {MAX_COMPARE} products to compare them here.</p>
+          <Link to="/products" style={{ display: 'inline-block', marginTop: 12 }}>Browse products</Link>
+        </EmptyState>
+      ) : ids.length === 1 ? (
+        <EmptyState data-testid="compare-need-more">
+          <p>Select at least one more product to compare.</p>
+          <Link to="/products" style={{ display: 'inline-block', marginTop: 12 }}>Add another product</Link>
+        </EmptyState>
+      ) : null}
 
-      {selected.length === 0 ? (
-        <Empty>
-          No products selected. Add one to start comparing.
-        </Empty>
-      ) : (
-        <Table data-testid="compare-table">
-          <thead>
-            <tr>
-              <th>Attribute</th>
-              {selected.map((p) => (
-                <th key={p.id} data-testid="compare-column-head">
-                  {p.name}
-                </th>
+      {products.length > 0 && (
+        <div style={{ overflowX: 'auto' }}>
+          <Table data-testid="compare-table">
+            <thead>
+              <tr>
+                <th />
+                {products.map(p => (
+                  <th key={p.id} data-testid="compare-column-head">
+                    <Link to={`/products/${p.id}`}>{p.name}</Link>
+                    <div>
+                      <button type="button" className="btn-outline" style={{ padding: '4px 10px', marginTop: 8 }} data-testid="compare-remove-button" onClick={() => remove(p.id)}>
+                        Remove
+                      </button>
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ROWS.map(row => (
+                <tr key={row.key} data-testid={`compare-row-${row.key}`}>
+                  <th scope="row">{row.label}</th>
+                  {products.map(p => (
+                    <td key={p.id} data-testid={`compare-cell-${row.key}`}>
+                      {row.render(p)}
+                      {row.key === 'price' && cheapest !== null && p.price === cheapest && <Best data-testid="best-price">Lowest price</Best>}
+                      {row.key === 'rating' && bestRated !== null && bestRated > 0 && p.rating === bestRated && <Best data-testid="best-rating">Top rated</Best>}
+                    </td>
+                  ))}
+                </tr>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr data-testid="compare-row-price">
-              <td>Price</td>
-              {selected.map((p) => (
-                <td key={p.id} data-testid="compare-cell-price">
-                  ${p.price.toFixed(2)}
-                </td>
-              ))}
-            </tr>
-            <tr data-testid="compare-row-rating">
-              <td>Rating</td>
-              {selected.map((p) => (
-                <td key={p.id} data-testid="compare-cell-rating">
-                  {p.rating.toFixed(1)}
-                </td>
-              ))}
-            </tr>
-            <tr data-testid="compare-row-stock">
-              <td>Stock</td>
-              {selected.map((p) => (
-                <td key={p.id} data-testid="compare-cell-stock">
-                  {p.stock}
-                </td>
-              ))}
-            </tr>
-            <tr data-testid="compare-row-category">
-              <td>Category</td>
-              {selected.map((p) => (
-                <td key={p.id} data-testid="compare-cell-category">
-                  {p.category}
-                </td>
-              ))}
-            </tr>
-            <tr>
-              <td></td>
-              {selected.map((p) => (
-                <td key={p.id}>
-                  <button
-                    className="btn-outline"
-                    data-testid="compare-remove-button"
-                    onClick={() => remove(p.id)}
-                  >
-                    Remove
-                  </button>
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </Table>
+            </tbody>
+          </Table>
+        </div>
       )}
     </Page>
   );

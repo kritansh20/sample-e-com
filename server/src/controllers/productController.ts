@@ -1,51 +1,49 @@
 import { Request, Response } from 'express';
-import productRepository from '../repositories/productRepository';
+import productRepository, { PRODUCT_SORTS, ProductSort } from '../repositories/productRepository';
+import { FieldErrors, sendValidationError } from '../utils/validation';
+
+const parseNumber = (value: unknown): number | undefined | null => {
+  if (value === undefined || value === '') return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
 
 export const getProducts = async (req: Request, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 12;
-    const search = req.query.search as string;
-    const category = req.query.category as string;
-    const featured = req.query.featured === 'true';
+    const errors: FieldErrors = {};
+    const page = parseNumber(req.query.page) ?? 1;
+    const limit = parseNumber(req.query.limit) ?? 12;
+    const minPrice = parseNumber(req.query.minPrice);
+    const maxPrice = parseNumber(req.query.maxPrice);
+    const minRating = parseNumber(req.query.minRating);
+    const sort = (req.query.sort as string | undefined) || 'relevance';
 
-    // Get all products without pagination first to apply custom filters
-    const allProductsResponse = await productRepository.findAll();
-    let products = allProductsResponse.data;
+    if (page === null || !Number.isInteger(page) || page < 1) errors.page = 'page must be a whole number of 1 or more';
+    if (limit === null || !Number.isInteger(limit) || limit < 1 || limit > 50) errors.limit = 'limit must be a whole number from 1 to 50';
+    if (minPrice === null || (minPrice !== undefined && minPrice < 0)) errors.minPrice = 'minPrice must be 0 or more';
+    if (maxPrice === null || (maxPrice !== undefined && maxPrice < 0)) errors.maxPrice = 'maxPrice must be 0 or more';
+    if (minPrice != null && maxPrice != null && minPrice > maxPrice) errors.minPrice = 'minPrice cannot be greater than maxPrice';
+    if (minRating === null || (minRating !== undefined && (minRating < 0 || minRating > 5))) errors.minRating = 'minRating must be between 0 and 5';
+    if (!PRODUCT_SORTS.includes(sort as ProductSort)) errors.sort = `sort must be one of ${PRODUCT_SORTS.join(', ')}`;
+    if (Object.keys(errors).length) return sendValidationError(res, errors, 'Invalid product filters');
 
-    // Apply filters
-    if (search) {
-      products = products.filter(product => 
-        product.name.toLowerCase().includes(search.toLowerCase()) ||
-        product.description.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-
-    if (category) {
-      products = products.filter(product => product.category === category);
-    }
-
-    if (featured) {
-      products = products.filter(product => product.featured);
-    }
-
-    // Pagination
-    const total = products.length;
-    const totalPages = Math.ceil(total / limit);
-    const offset = (page - 1) * limit;
-    const paginatedProducts = products.slice(offset, offset + limit);
+    const result = await productRepository.query({
+      search: (req.query.search as string) || undefined,
+      category: (req.query.category as string) || undefined,
+      minPrice: minPrice ?? undefined,
+      maxPrice: maxPrice ?? undefined,
+      minRating: minRating ?? undefined,
+      inStock: req.query.inStock === 'true',
+      onSale: req.query.onSale === 'true',
+      featured: req.query.featured === 'true',
+      sort: sort as ProductSort,
+      page: page as number,
+      limit: limit as number
+    });
 
     res.json({
       success: true,
-      data: {
-        data: paginatedProducts,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages
-        }
-      }
+      data: result
     });
   } catch (error) {
     console.error('Get products error:', error);
@@ -84,7 +82,7 @@ export const getProduct = async (req: Request, res: Response) => {
 export const getFeaturedProducts = async (req: Request, res: Response) => {
   try {
     const { limit = 4 } = req.query;
-    const products = await productRepository.getFeaturedProducts(parseInt(limit as string));
+    const products = await productRepository.getFeaturedProducts(parseInt(limit as string) || 4);
 
     res.json({
       success: true,

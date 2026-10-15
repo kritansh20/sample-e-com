@@ -3,11 +3,17 @@ import { render, RenderOptions } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from '../hooks/useAuth';
 import { CartProvider } from '../hooks/useCart';
+import { WishlistProvider } from '../hooks/useWishlist';
+import { CompareProvider } from '../hooks/useCompare';
 
 const AllTheProviders = ({ children }: { children: React.ReactNode }) => (
   <BrowserRouter>
     <AuthProvider>
-      <CartProvider>{children}</CartProvider>
+      <CartProvider>
+        <WishlistProvider>
+          <CompareProvider>{children}</CompareProvider>
+        </WishlistProvider>
+      </CartProvider>
     </AuthProvider>
   </BrowserRouter>
 );

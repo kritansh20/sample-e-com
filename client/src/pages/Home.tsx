@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import { ProductCard } from '../components/ProductCard';
 import apiClient from '../services/apiClient';
@@ -142,7 +142,35 @@ const ViewAllButton = styled(Link)`
   }
 `;
 
+const CategoryGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+
+  a {
+    display: block;
+    background: #fff;
+    border-radius: 8px;
+    padding: 24px 16px;
+    text-align: center;
+    font-weight: 600;
+    color: #333;
+    text-decoration: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  a:hover {
+    color: #007bff;
+  }
+`;
+
+const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
 const Home: React.FC = () => {
+  const location = useLocation();
+  const [categories, setCategories] = useState<string[]>([]);
+  const [deals, setDeals] = useState<Product[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -163,10 +191,17 @@ const Home: React.FC = () => {
     };
 
     fetchFeaturedProducts();
+    apiClient.getCategories().then(setCategories).catch(() => setCategories([]));
+    apiClient.getProducts({ onSale: true, limit: 4, sort: 'price_asc' }).then(r => setDeals(r.data.data)).catch(() => setDeals([]));
   }, []);
 
   return (
     <HomeContainer role="main">
+      {(location.state as { welcome?: boolean } | null)?.welcome && (
+        <div className="card" role="status" data-testid="welcome-message" style={{ background: '#d4edda', color: '#155724' }}>
+          Welcome! Your account has been created.
+        </div>
+      )}
       <HeroSection role="banner" data-testid="hero-section">
         <h1>Welcome to Our Store</h1>
         <p>Discover amazing products at great prices</p>
@@ -176,6 +211,26 @@ const Home: React.FC = () => {
       </HeroSection>
 
       <FeaturedSection>
+        <SectionTitle>Shop by Category</SectionTitle>
+        <CategoryGrid data-testid="category-grid">
+          {categories.map(category => (
+            <Link key={category} to={`/products?category=${encodeURIComponent(category)}`} data-testid={`category-link-${slug(category)}`}>
+              {category}
+            </Link>
+          ))}
+        </CategoryGrid>
+
+        {deals.length > 0 && (
+          <>
+            <SectionTitle>Deals</SectionTitle>
+            <ProductGrid data-testid="deals-grid" style={{ marginBottom: 40 }}>
+              {deals.map(product => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </ProductGrid>
+          </>
+        )}
+
         <SectionTitle>Featured Products</SectionTitle>
         
         {loading && (
@@ -200,7 +255,7 @@ const Home: React.FC = () => {
               ))}
             </ProductGrid>
             
-            <ViewAllButton to="/products">
+            <ViewAllButton to="/products" data-testid="view-all-products">
               View All Products
             </ViewAllButton>
           </>
