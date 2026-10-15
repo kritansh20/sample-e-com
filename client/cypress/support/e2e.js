@@ -1,5 +1,6 @@
 // Import commands.js using ES2015 syntax
 import './commands';
+import './auth';
 
 // Import cypress-axe for accessibility testing
 import 'cypress-axe';
