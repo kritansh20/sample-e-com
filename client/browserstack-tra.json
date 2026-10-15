@@ -1,0 +1,15 @@
+{
+  "run_settings": {
+    "cypress_config_file": "./cypress.config.js"
+  },
+  "testObservability": true,
+  "browserstackAutomation": false,
+  "testObservabilityOptions": {
+    "projectName": "Sample-E-Commerce",
+    "buildName": "Sanity - 1.0.0",
+    "buildTag": [
+      "P1",
+      "P0"
+    ]
+  }
+}

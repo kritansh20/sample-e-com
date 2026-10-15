@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: sample-ecom-client
+    runtime: static
+    rootDir: client
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./build
+    envVars:
+      # Base URL of the deployed backend, including the /api suffix.
+      # Baked into the bundle at build time, so changing it needs a redeploy.
+      - key: REACT_APP_API_URL
+        sync: false
+      # react-scripts treats lint warnings as errors when CI=true.
+      - key: CI
+        value: "false"
+      - key: NODE_VERSION
+        value: "20"
+    # SPA fallback so client-side routes survive a direct hit or refresh
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
