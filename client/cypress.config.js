@@ -1,6 +1,7 @@
 const { defineConfig } = require('cypress');
 // Sends local Cypress runs to BrowserStack Test Reporting & Analytics (browserstack-tra.json).
 const browserstackTestObservabilityPlugin = require('browserstack-cypress-cli/bin/testObservability/plugin');
+const { registerAuthTasks } = require('./cypress/support/auth-tasks');
 
 module.exports = defineConfig({
   e2e: {
@@ -51,6 +52,8 @@ module.exports = defineConfig({
         console.log('Code coverage not available, skipping...');
       }
       
+      registerAuthTasks(on);
+
       // Custom tasks
       on('task', {
         log(message) {
