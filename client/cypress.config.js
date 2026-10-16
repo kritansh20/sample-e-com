@@ -4,8 +4,8 @@ const browserstackTestObservabilityPlugin = require('browserstack-cypress-cli/bi
 
 module.exports = defineConfig({
   e2e: {
-    // Set baseUrl to the correct port where the app is running
-    baseUrl: 'http://localhost:5005',
+    // Set baseUrl to the target URL
+    baseUrl: process.env.CYPRESS_BASE_URL || 'https://deny-anyone-hotels-programme.trycloudflare.com',
     viewportWidth: 1280,
     viewportHeight: 720,
     defaultCommandTimeout: 10000,

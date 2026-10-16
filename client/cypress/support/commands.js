@@ -1,5 +1,40 @@
 // Custom Cypress commands for this app
 
+// Auth session support — reuse saved session when STORAGE_STATE_PATH is set
+Cypress.Commands.add('loginWithSession', (email = 'john@example.com', password = 'Ecomm@123') => {
+  const storagePath = Cypress.env('STORAGE_STATE_PATH');
+  if (storagePath) {
+    cy.log(`🔑 Restoring session from ${storagePath}`);
+    cy.readFile(storagePath, { log: false }).then((state) => {
+      if (state && state.cookies) {
+        state.cookies.forEach((cookie) => {
+          cy.setCookie(cookie.name, cookie.value, {
+            domain: cookie.domain,
+            path: cookie.path,
+            secure: cookie.secure,
+            httpOnly: cookie.httpOnly,
+            expiry: cookie.expires
+          });
+        });
+      }
+      if (state && state.origins) {
+        state.origins.forEach((origin) => {
+          if (origin.localStorage) {
+            origin.localStorage.forEach((item) => {
+              cy.window().then((win) => {
+                win.localStorage.setItem(item.name, item.value);
+              });
+            });
+          }
+        });
+      }
+    });
+  } else {
+    cy.loginAsTestUser(email, password);
+  }
+});
+
+
 // Custom commands for e-commerce app testing
 Cypress.Commands.add('loginAsTestUser', (email = 'john@example.com', password = 'Ecomm@123') => {
   cy.log(`🔐 Logging in user: ${email}`);
