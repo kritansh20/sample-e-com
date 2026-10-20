@@ -415,9 +415,9 @@ describe('Wishlist', () => {
     });
   });
 
-  it('wishlist page shows wishlist message element', () => {
+  it('wishlist page shows item count in the count element', () => {
     cy.visit('/wishlist');
-    cy.get('[data-testid="wishlist-message"]').should('exist');
+    cy.get('[data-testid="wishlist-count"]').should('be.visible');
   });
 
   it('wishlist page is accessible with basic accessibility checks', () => {
