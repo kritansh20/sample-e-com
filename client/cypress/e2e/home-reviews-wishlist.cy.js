@@ -225,15 +225,15 @@ describe('Product Reviews', () => {
   });
 
   it('sort select has newest option', () => {
-    cy.get('[data-testid="review-sort-select"]').should('contain', 'newest');
+    cy.get('[data-testid="review-sort-select"]').should('contain', 'Newest');
   });
 
   it('sort select has highest option', () => {
-    cy.get('[data-testid="review-sort-select"]').should('contain', 'highest');
+    cy.get('[data-testid="review-sort-select"]').should('contain', 'Highest rated');
   });
 
   it('sort select has lowest option', () => {
-    cy.get('[data-testid="review-sort-select"]').should('contain', 'lowest');
+    cy.get('[data-testid="review-sort-select"]').should('contain', 'Lowest rated');
   });
 
   it('reviews section exists on the product detail page', () => {
