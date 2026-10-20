@@ -1,6 +1,14 @@
 // Import commands.js using ES2015 syntax
 import './commands';
 
+// Restore saved auth session when available
+const storagePath = Cypress.env('STORAGE_STATE_PATH') || (typeof process !== 'undefined' && process.env.STORAGE_STATE_PATH);
+if (storagePath) {
+  before(() => {
+    cy.task('log', `Using saved auth session from ${storagePath}`);
+  });
+}
+
 // Import cypress-axe for accessibility testing
 import 'cypress-axe';
 

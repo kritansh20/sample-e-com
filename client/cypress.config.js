@@ -5,7 +5,7 @@ const browserstackTestObservabilityPlugin = require('browserstack-cypress-cli/bi
 module.exports = defineConfig({
   e2e: {
     // Set baseUrl to the correct port where the app is running
-    baseUrl: 'http://localhost:5005',
+    baseUrl: process.env.CYPRESS_BASE_URL || 'https://scholarships-dispatch-association-organic.trycloudflare.com',
     viewportWidth: 1280,
     viewportHeight: 720,
     defaultCommandTimeout: 10000,
@@ -16,7 +16,7 @@ module.exports = defineConfig({
     
     // Environment variables for local testing
     env: {
-      apiUrl: 'http://localhost:5010/api',
+      apiUrl: process.env.CYPRESS_API_URL || 'https://scholarships-dispatch-association-organic.trycloudflare.com/api',
       coverage: true,
       testUser: {
         email: 'john@example.com',
