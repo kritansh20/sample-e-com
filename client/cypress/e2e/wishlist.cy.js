@@ -14,14 +14,15 @@ describe('Wishlist', () => {
     cy.contains('My Wishlist').should('be.visible');
   });
 
-  // 3. Empty wishlist shows empty state message
+  // 3. Empty wishlist shows empty state message or list
   it('shows empty state when wishlist has no items', () => {
     cy.loginAsTestUser();
     cy.visit('/wishlist');
     cy.get('[data-testid="wishlist-count"]', { timeout: 10000 }).should('be.visible');
     cy.get('body').then($body => {
       if ($body.find('[data-testid="wishlist-list"]').length === 0) {
-        cy.contains('Your wishlist is empty.').should('be.visible');
+        cy.get('[data-testid="wishlist-empty"]').should('be.visible');
+        cy.get('[data-testid="wishlist-empty"]').contains('Your wishlist is empty.');
         cy.contains('Browse products').should('be.visible');
       } else {
         cy.get('[data-testid="wishlist-list"]').should('be.visible');
