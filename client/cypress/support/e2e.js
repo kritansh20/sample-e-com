@@ -1,6 +1,14 @@
 // Import commands.js using ES2015 syntax
 import './commands';
 
+// Load saved auth session when available (set by preflight)
+const storagePath = Cypress.env('STORAGE_STATE_PATH') || (typeof process !== 'undefined' && process.env.STORAGE_STATE_PATH);
+if (storagePath) {
+  before(() => {
+    cy.log(`Loading auth session from ${storagePath}`);
+  });
+}
+
 // Import cypress-axe for accessibility testing
 import 'cypress-axe';
 
