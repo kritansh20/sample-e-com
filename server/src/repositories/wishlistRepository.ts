@@ -8,6 +8,11 @@ class WishlistRepository {
   private items: WishlistItem[] = [];
 
   constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.items = [];
     SEED_WISHLIST.forEach((seed, index) => {
       const user = userRepository.findByEmailSync(seed.email);
       const product = productRepository.findByNameSync(seed.product);

@@ -10,10 +10,12 @@ class OrderRepository {
   private nextOrderNumber = 1001;
 
   constructor() {
-    this.initializeData();
+    this.reset();
   }
 
-  private initializeData() {
+  reset() {
+    this.orders = [];
+    this.nextOrderNumber = 1001;
     for (const seed of SEED_ORDERS) {
       const user = userRepository.findByEmailSync(seed.email);
       if (!user) continue;

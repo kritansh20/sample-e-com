@@ -9,6 +9,11 @@ class ReviewRepository {
   private reviews: Review[] = [];
 
   constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.reviews = [];
     for (const seed of SEED_REVIEWS) {
       const product = productRepository.findByNameSync(seed.product);
       if (!product) continue;

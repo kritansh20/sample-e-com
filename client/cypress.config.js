@@ -1,3 +1,4 @@
+const fs = require('fs');
 const { defineConfig } = require('cypress');
 // Sends local Cypress runs to BrowserStack Test Reporting & Analytics (browserstack-tra.json).
 const browserstackTestObservabilityPlugin = require('browserstack-cypress-cli/bin/testObservability/plugin');
@@ -11,13 +12,15 @@ module.exports = defineConfig({
     defaultCommandTimeout: 10000,
     requestTimeout: 10000,
     responseTimeout: 10000,
-    video: true,
+    video: false,
     screenshotOnRunFailure: true,
     
     // Environment variables for local testing
     env: {
       apiUrl: 'http://localhost:5010/api',
       coverage: true,
+      grepFilterSpecs: true,
+      grepOmitFiltered: true,
       testUser: {
         email: 'john@example.com',
         password: 'Ecomm@123'
@@ -67,11 +70,16 @@ module.exports = defineConfig({
         
         // Reset database
         async resetDb() {
-          console.log('Resetting test database...');
-          // Implementation for resetting test data
-          return { success: true };
+          const res = await fetch(`${config.env.apiUrl}/test/reset`, { method: 'POST' });
+          return { success: res.ok };
         },
         
+        readStorageState() {
+          const statePath = process.env.STORAGE_STATE_PATH;
+          if (!statePath || !fs.existsSync(statePath)) return null;
+          return JSON.parse(fs.readFileSync(statePath, 'utf8'));
+        },
+
         // Generate test report - fixed to not fail
         generateTestReport() {
           console.log('Test completed successfully');
@@ -112,6 +120,11 @@ module.exports = defineConfig({
         config.defaultCommandTimeout = 8000;
       }
 
+      if (config.env.apiUrl === 'http://localhost:5010/api' && !config.baseUrl.startsWith('http://localhost:5005')) {
+        config.env.apiUrl = `${config.baseUrl.replace(/\/$/, '')}/api`;
+      }
+
+      require('@cypress/grep/src/plugin')(config);
       browserstackTestObservabilityPlugin(on, config);
       return config;
     },

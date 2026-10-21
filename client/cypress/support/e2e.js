@@ -1,6 +1,8 @@
 // Import commands.js using ES2015 syntax
 import './commands';
 
+require('@cypress/grep')();
+
 // Import cypress-axe for accessibility testing
 import 'cypress-axe';
 

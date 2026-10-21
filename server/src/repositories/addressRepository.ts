@@ -9,6 +9,11 @@ class AddressRepository {
   private addresses: SavedAddress[] = [];
 
   constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.addresses = [];
     for (const seed of SEED_ADDRESSES) {
       const user = userRepository.findByEmailSync(seed.email);
       if (!user) continue;

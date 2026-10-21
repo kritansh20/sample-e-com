@@ -19,6 +19,7 @@
   "devDependencies": {
     "@axe-core/react": "^4.8.4",
     "@cypress/code-coverage": "^3.14.5",
+    "@cypress/grep": "^4.1.1",
     "@storybook/addon-a11y": "^7.0.0",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^14.3.1",

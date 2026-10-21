@@ -1,4 +1,9 @@
+import { v5 as uuidv5 } from 'uuid';
 import { OrderStatus, PaymentMethod, ShippingMethod } from '../models';
+
+const SEED_ID_NAMESPACE = '6f1c2a4e-8b3d-4c5e-9a7f-2d1b0e3c4a5f';
+
+export const seedId = (kind: string, key: string) => uuidv5(`${kind}:${key}`, SEED_ID_NAMESPACE);
 
 export interface SeedProduct {
   name: string;
@@ -15,7 +20,7 @@ export interface SeedProduct {
 const img = (photoId: string) => `https://images.unsplash.com/${photoId}?w=400`;
 
 export const SEED_PRODUCTS: SeedProduct[] = [
-  { name: 'MacBook Pro 16"', brand: 'Apple', category: 'Electronics', price: 2499.99, stock: 10, featured: true,
+  { name: 'MacBook Pro 16"', brand: 'Apple', category: 'Electronics', price: 2499.99, stock: 50, featured: true,
     description: 'Apple MacBook Pro 16-inch with M2 Pro chip, 16GB RAM and a 512GB SSD.', imageUrl: img('photo-1517336714731-489689fd1ca8') },
   { name: 'iPhone 15 Pro', brand: 'Apple', category: 'Electronics', price: 999.99, originalPrice: 1099.99, stock: 25, featured: true,
     description: 'iPhone 15 Pro with the A17 Pro chip, 128GB storage and a titanium design.', imageUrl: img('photo-1592750475338-74b7b21085ab') },

@@ -8,6 +8,7 @@ interface WishlistContextType {
   wishlist: Wishlist | null;
   count: number;
   loading: boolean;
+  loaded: boolean;
   isInWishlist: (productId: string) => boolean;
   toggle: (productId: string) => Promise<void>;
   remove: (productId: string) => Promise<void>;
@@ -22,6 +23,7 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
   const { setCart } = useCart();
   const [wishlist, setWishlist] = useState<Wishlist | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -30,12 +32,16 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
       setWishlist(await apiClient.getWishlist());
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated) refresh().catch(() => undefined);
-    else setWishlist(null);
+    else {
+      setWishlist(null);
+      setLoaded(false);
+    }
   }, [isAuthenticated, refresh]);
 
   const isInWishlist = (productId: string) => Boolean(wishlist?.items.some(item => item.productId === productId));
@@ -53,6 +59,7 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
     wishlist,
     count: wishlist?.count || 0,
     loading,
+    loaded,
     isInWishlist,
     toggle: async (productId) => {
       const next = await guard(

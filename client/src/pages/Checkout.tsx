@@ -126,9 +126,10 @@ const formatCardNumber = (value: string) => value.replace(/\D/g, '').slice(0, 19
 
 const Checkout: React.FC = () => {
   const navigate = useNavigate();
-  const { cart, loading: cartLoading, refreshCart } = useCart();
+  const { cart, loaded: cartLoaded, refreshCart } = useCart();
 
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
+  const [addressesLoaded, setAddressesLoaded] = useState(false);
   const [addressChoice, setAddressChoice] = useState<string>('new');
   const [newAddress, setNewAddress] = useState<AddressInput>(emptyAddress());
   const [saveAddress, setSaveAddress] = useState(false);
@@ -146,7 +147,7 @@ const Checkout: React.FC = () => {
       setAddresses(list);
       const preferred = list.find(a => a.isDefault) || list[0];
       if (preferred) setAddressChoice(preferred.id);
-    }).catch(() => setAddresses([]));
+    }).catch(() => setAddresses([])).finally(() => setAddressesLoaded(true));
     apiClient.getShippingOptions().then(setOptions).catch(() => setOptions([]));
   }, []);
 
@@ -155,8 +156,8 @@ const Checkout: React.FC = () => {
     apiClient.getQuote(shippingMethod).then(setQuote).catch(err => setError(getErrorMessage(err, 'Could not calculate totals')));
   }, [shippingMethod, cart]);
 
-  if (!cart && cartLoading) {
-    return <Page><div className="loading">Loading checkout...</div></Page>;
+  if (!cartLoaded || !addressesLoaded) {
+    return <Page><div className="loading" data-testid="checkout-loading">Loading checkout...</div></Page>;
   }
 
   if (!cart || cart.items.length === 0) {

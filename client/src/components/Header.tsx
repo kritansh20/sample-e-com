@@ -97,8 +97,8 @@ const UserActions = styled.div`
 
 const Header: React.FC = () => {
   const { isAuthenticated, isAdmin, user, logout } = useAuth();
-  const { cart } = useCart();
-  const { count: wishlistCount } = useWishlist();
+  const { cart, loaded: cartLoaded } = useCart();
+  const { count: wishlistCount, loaded: wishlistLoaded } = useWishlist();
   const { ids: compareIds } = useCompare();
   const navigate = useNavigate();
 
@@ -123,11 +123,11 @@ const Header: React.FC = () => {
 
           {isAuthenticated ? (
             <>
-              <CartLink to="/wishlist" data-testid="wishlist-link">
+              <CartLink to="/wishlist" data-testid="wishlist-link" aria-busy={!wishlistLoaded}>
                 Wishlist
                 {wishlistCount > 0 && <CartBadge data-testid="wishlist-badge">{wishlistCount}</CartBadge>}
               </CartLink>
-              <CartLink to="/cart" data-testid="cart-link">
+              <CartLink to="/cart" data-testid="cart-link" aria-busy={!cartLoaded}>
                 Cart
                 {cart && cart.totalItems > 0 && (
                   <CartBadge data-testid="cart-badge">{cart.totalItems}</CartBadge>

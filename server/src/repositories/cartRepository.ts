@@ -5,6 +5,11 @@ class CartRepository {
   private cartItems: CartItem[] = [];
   private coupons = new Map<string, string>();
 
+  reset() {
+    this.cartItems = [];
+    this.coupons.clear();
+  }
+
   async findByUserId(userId: string): Promise<CartItem[]> {
     return this.cartItems
       .filter(item => item.userId === userId)

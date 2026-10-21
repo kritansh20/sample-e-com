@@ -40,7 +40,7 @@ const Item = styled.div`
 `;
 
 export default function Wishlist() {
-  const { wishlist, loading, remove, moveToCart } = useWishlist();
+  const { wishlist, loaded, remove, moveToCart } = useWishlist();
   const [message, setMessage] = useState<{ text: string; variant: 'success' | 'error' } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -62,13 +62,15 @@ export default function Wishlist() {
   return (
     <Page data-testid="wishlist-page">
       <PageTitle>My Wishlist</PageTitle>
-      <p style={{ marginBottom: 16 }} data-testid="wishlist-count">
-        {items.length} {items.length === 1 ? 'item' : 'items'}
-      </p>
+      {loaded && (
+        <p style={{ marginBottom: 16 }} data-testid="wishlist-count">
+          {items.length} {items.length === 1 ? 'item' : 'items'}
+        </p>
+      )}
       {message && <Alert variant={message.variant} testId="wishlist-message">{message.text}</Alert>}
 
-      {loading && !wishlist ? (
-        <EmptyState>Loading your wishlist...</EmptyState>
+      {!loaded ? (
+        <EmptyState data-testid="wishlist-loading">Loading your wishlist...</EmptyState>
       ) : items.length === 0 ? (
         <EmptyState data-testid="wishlist-empty">
           <p>Your wishlist is empty.</p>

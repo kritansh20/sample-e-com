@@ -1,19 +1,79 @@
 // Custom Cypress commands for this app
 
 // Custom commands for e-commerce app testing
+Cypress.Commands.add('apiLogin', (email = 'john@example.com', password = 'Ecomm@123') => {
+  return cy
+    .request('POST', `${Cypress.env('apiUrl')}/auth/login`, { email, password })
+    .then(({ body }) => body.data);
+});
+
 Cypress.Commands.add('loginAsTestUser', (email = 'john@example.com', password = 'Ecomm@123') => {
   cy.log(`🔐 Logging in user: ${email}`);
-  
-  cy.visit('/login');
-  cy.get('#email').clear().type(email);
-  cy.get('#password').clear().type(password);
-  cy.get('button[type="submit"]').click();
-  
-  // Wait for successful login and redirect
-  cy.url({ timeout: 10000 }).should('not.include', '/login');
-  cy.get('header').should('contain', 'Hi,'); // User greeting should appear
-  
+
+  cy.session(
+    ['login', email],
+    () => {
+      cy.apiLogin(email, password).then(({ token, user }) => {
+        window.localStorage.setItem('authToken', token);
+        window.localStorage.setItem('user', JSON.stringify(user));
+      });
+    },
+    {
+      cacheAcrossSpecs: true,
+      validate() {
+        cy.request({
+          url: `${Cypress.env('apiUrl')}/auth/profile`,
+          headers: { Authorization: `Bearer ${window.localStorage.getItem('authToken')}` }
+        });
+      }
+    }
+  );
+
+  cy.visit('/');
+  cy.get('header').should('contain', 'Hi,');
+
   cy.log('✅ Login successful');
+});
+
+const authHeaders = (token) => ({ Authorization: `Bearer ${token}` });
+
+Cypress.Commands.add('apiClearCart', (email = 'john@example.com', password = 'Ecomm@123') => {
+  cy.apiLogin(email, password).then(({ token }) => {
+    cy.request({ method: 'DELETE', url: `${Cypress.env('apiUrl')}/cart`, headers: authHeaders(token) });
+  });
+});
+
+Cypress.Commands.add('apiClearWishlist', (email = 'john@example.com', password = 'Ecomm@123') => {
+  cy.apiLogin(email, password).then(({ token }) => {
+    cy.request({ url: `${Cypress.env('apiUrl')}/wishlist`, headers: authHeaders(token) }).then(({ body }) => {
+      body.data.items.forEach(item => {
+        cy.request({ method: 'DELETE', url: `${Cypress.env('apiUrl')}/wishlist/${item.productId}`, headers: authHeaders(token) });
+      });
+    });
+  });
+});
+
+Cypress.Commands.add('resetTestData', () => {
+  cy.request('POST', `${Cypress.env('apiUrl')}/test/reset`);
+});
+
+Cypress.Commands.add('restoreStorageState', () => {
+  return cy.task('readStorageState').then(state => {
+    if (!state) return cy.wrap(false);
+    const origin = new URL(Cypress.config('baseUrl')).origin;
+    (state.cookies || []).forEach(cookie => {
+      cy.setCookie(cookie.name, cookie.value, {
+        domain: cookie.domain,
+        path: cookie.path,
+        secure: cookie.secure,
+        httpOnly: cookie.httpOnly,
+        ...(cookie.expires > 0 ? { expiry: cookie.expires } : {})
+      });
+    });
+    const saved = (state.origins || []).find(entry => entry.origin === origin);
+    (saved?.localStorage || []).forEach(({ name, value }) => window.localStorage.setItem(name, value));
+    return cy.wrap(true);
+  });
 });
 
 Cypress.Commands.add('registerNewUser', (userDetails = {}) => {
@@ -32,6 +92,8 @@ Cypress.Commands.add('registerNewUser', (userDetails = {}) => {
   cy.get('#lastName').type(defaultUser.lastName);
   cy.get('#email').type(defaultUser.email);
   cy.get('#password').type(defaultUser.password);
+  cy.get('#confirmPassword').type(defaultUser.password);
+  cy.get('[data-testid="terms-checkbox"]').check();
   cy.get('button[type="submit"]').click();
   
   // Should redirect after successful registration
@@ -55,21 +117,22 @@ Cypress.Commands.add('addProductToCart', () => {
     }
   });
   
-  // Find first available product with "Add to Cart" button
+  cy.intercept('POST', '**/api/cart').as('addToCart');
   cy.get('[data-testid="products-container"]').within(() => {
-    cy.get('button').contains('Add to Cart').first().click();
+    cy.contains('button:not([disabled])', 'Add to Cart').click();
   });
-  
-  cy.wait(2000); // Wait for cart update
+  cy.wait('@addToCart');
   cy.log('✅ Product added to cart');
 });
 
 Cypress.Commands.add('searchProducts', (searchTerm) => {
   cy.log(`🔍 Searching for: ${searchTerm}`);
   
+  cy.intercept({ method: 'GET', pathname: '/api/products', query: { search: searchTerm } }).as('searchProducts');
   cy.visit('/products');
   cy.get('input[placeholder*="Search products"]').clear().type(searchTerm);
-  cy.wait(2000); // Wait for search results
+  cy.wait('@searchProducts');
+  cy.waitForProductsToLoad();
   
   cy.log('✅ Search completed');
 });
@@ -77,9 +140,11 @@ Cypress.Commands.add('searchProducts', (searchTerm) => {
 Cypress.Commands.add('filterByCategory', (categoryName) => {
   cy.log(`📂 Filtering by category: ${categoryName}`);
   
+  cy.intercept({ method: 'GET', pathname: '/api/products', query: { category: categoryName } }).as('filterProducts');
   cy.visit('/products');
-  cy.get('select').select(categoryName);
-  cy.wait(2000); // Wait for filter results
+  cy.get('[data-testid="category-select"]').select(categoryName);
+  cy.wait('@filterProducts');
+  cy.waitForProductsToLoad();
   
   cy.log('✅ Category filter applied');
 });

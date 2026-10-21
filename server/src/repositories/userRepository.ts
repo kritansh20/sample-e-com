@@ -1,25 +1,33 @@
 import { User } from '../models';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
+import { seedId } from '../data/seed';
+
+export const TEST_USER_PASSWORD = 'Ecomm@123';
+export const TEST_USER_COUNT = 5;
 
 class UserRepository {
   private users: User[] = [];
 
   constructor() {
-    this.initializeData();
+    this.reset();
   }
 
-  private initializeData() {
+  reset() {
+    this.users = [];
     const seedUsers: Omit<User, 'id' | 'createdAt' | 'updatedAt'>[] = [
       { email: 'john@example.com', password: 'Ecomm@123', firstName: 'John', lastName: 'Doe', role: 'customer' },
       { email: 'jane@example.com', password: 'Ecomm@123', firstName: 'Jane', lastName: 'Smith', role: 'customer' },
       { email: 'admin@example.com', password: 'Admin@123', firstName: 'Ada', lastName: 'Admin', role: 'admin' },
+      ...Array.from({ length: TEST_USER_COUNT }, (_, i) => ({
+        email: `tester${i + 1}@example.com`, password: TEST_USER_PASSWORD, firstName: `Tester${i + 1}`, lastName: 'User', role: 'customer' as const
+      })),
     ];
 
     for (const userData of seedUsers) {
       this.users.push({
         ...userData,
-        id: uuidv4(),
+        id: seedId('user', userData.email),
         password: bcrypt.hashSync(userData.password, 10),
         createdAt: new Date(),
         updatedAt: new Date()

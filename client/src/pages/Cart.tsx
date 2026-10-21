@@ -86,7 +86,7 @@ const CouponForm = styled.form`
 
 const Cart: React.FC = () => {
   const navigate = useNavigate();
-  const { cart, loading, error, updateCartItem, removeFromCart, moveToWishlist, clearCart, applyCoupon, removeCoupon } = useCart();
+  const { cart, loading, loaded, error, updateCartItem, removeFromCart, moveToWishlist, clearCart, applyCoupon, removeCoupon } = useCart();
   const { refresh: refreshWishlist } = useWishlist();
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ text: string; variant: 'success' | 'error' } | null>(null);
@@ -133,7 +133,7 @@ const Cart: React.FC = () => {
     }
   };
 
-  if (!cart && loading) {
+  if (!loaded) {
     return <Page><div className="loading" data-testid="cart-loading">Loading your cart...</div></Page>;
   }
 

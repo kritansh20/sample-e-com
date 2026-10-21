@@ -1,6 +1,6 @@
 import { Product, PaginationParams, PaginatedResponse } from '../models';
 import { v4 as uuidv4 } from 'uuid';
-import { SEED_PRODUCTS, SEED_REVIEWS, daysBefore } from '../data/seed';
+import { SEED_PRODUCTS, SEED_REVIEWS, daysBefore, seedId } from '../data/seed';
 
 export type ProductSort = 'relevance' | 'price_asc' | 'price_desc' | 'rating' | 'newest' | 'name';
 
@@ -26,15 +26,15 @@ class ProductRepository {
   private products: Product[] = [];
 
   constructor() {
-    this.initializeData();
+    this.reset();
   }
 
-  private initializeData() {
+  reset() {
     this.products = SEED_PRODUCTS.map((seed, index) => {
       const ratings = SEED_REVIEWS.filter(review => review.product === seed.name).map(review => review.rating);
       const createdAt = daysBefore(120 - index * 4);
       return {
-        id: uuidv4(),
+        id: seedId('product', seed.name),
         ...seed,
         rating: ratings.length ? round1(ratings.reduce((sum, r) => sum + r, 0) / ratings.length) : 0,
         reviewCount: ratings.length,

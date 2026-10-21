@@ -7,6 +7,7 @@ interface CartContextType {
   cart: Cart | null;
   isLoading: boolean;
   loading: boolean;
+  loaded: boolean;
   error: string | null;
   addToCart: (productId: string, quantity: number) => Promise<void>;
   updateQuantity: (itemId: string, quantity: number) => Promise<void>;
@@ -25,6 +26,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [cart, setCart] = useState<Cart | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { isAuthenticated } = useAuth();
 
@@ -38,6 +40,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setError(getErrorMessage(err, 'Failed to load cart'));
     } finally {
       setIsLoading(false);
+      setLoaded(true);
     }
   }, [isAuthenticated]);
 
@@ -46,6 +49,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       refreshCart();
     } else {
       setCart(null);
+      setLoaded(false);
     }
   }, [isAuthenticated, refreshCart]);
 
@@ -70,6 +74,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     cart,
     isLoading,
     loading: isLoading,
+    loaded,
     error,
     addToCart: (productId, quantity) => run(() => apiClient.addToCart(productId, quantity), 'Failed to add item to cart'),
     updateQuantity: (itemId, quantity) => run(() => apiClient.updateCartItem(itemId, quantity), 'Failed to update quantity'),

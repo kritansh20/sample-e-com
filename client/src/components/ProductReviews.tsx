@@ -78,7 +78,7 @@ const StarPicker = styled.div`
 `;
 
 const ProductReviews: React.FC<{ productId: string; onStatsChange: () => void }> = ({ productId, onStatsChange }) => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   const location = useLocation();
   const [data, setData] = useState<ReviewsResponse | null>(null);
   const [sort, setSort] = useState('newest');
@@ -180,7 +180,9 @@ const ProductReviews: React.FC<{ productId: string; onStatsChange: () => void }>
 
       {success && <Alert variant="success" testId="review-success">{success}</Alert>}
 
-      {!isAuthenticated ? (
+      {authLoading || (!data && !error) ? (
+        <p data-testid="reviews-loading">Loading reviews...</p>
+      ) : !isAuthenticated ? (
         <p data-testid="review-login-prompt">
           <Link to="/login" state={{ from: location }}>Log in</Link> to write a review.
         </p>
