@@ -77,7 +77,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/admin', adminRoutes);
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.ENABLE_TEST_ROUTES === 'true' && process.env.NODE_ENV !== 'production') {
   app.use('/api/test', testingRoutes);
 }
 

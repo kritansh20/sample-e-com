@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import userRepository, { TEST_USER_COUNT, TEST_USER_PASSWORD } from '../repositories/userRepository';
+import userRepository, { TEST_USER_COUNT } from '../repositories/userRepository';
 import productRepository from '../repositories/productRepository';
 import reviewRepository from '../repositories/reviewRepository';
 import wishlistRepository from '../repositories/wishlistRepository';
@@ -20,8 +20,7 @@ router.post('/reset', (req, res) => {
   res.json({
     success: true,
     data: {
-      testUsers: Array.from({ length: TEST_USER_COUNT }, (_, i) => `tester${i + 1}@example.com`),
-      password: TEST_USER_PASSWORD
+      testUsers: Array.from({ length: TEST_USER_COUNT }, (_, i) => `tester${i + 1}@example.com`)
     }
   });
 });
